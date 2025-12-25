@@ -32,13 +32,13 @@ const StatCard = ({
     onClick={onClick}
     $clickable={!!onClick}
   >
-    <IconWatermark tone={tone}>
+    <IconWatermark $tone={tone}>
       <Icon />
     </IconWatermark>
     <StatContent>
       <StatLabel>{label}</StatLabel>
       <StatValue>{value}</StatValue>
-      <StatChip tone={tone}>{hint}</StatChip>
+      <StatChip $tone={tone}>{hint}</StatChip>
     </StatContent>
   </CardContainer>
 );

@@ -9,7 +9,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const Button = ({ children, variant = 'primary', ...rest }: ButtonProps) => (
-  <StyledButton variant={variant} {...rest}>
+  <StyledButton $variant={variant} {...rest}>
     {children}
   </StyledButton>
 );

@@ -1,88 +1,104 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   ArrowLeft,
+  Briefcase,
+  BriefcaseBusiness,
   Building2,
   Calendar,
   CheckCircle2,
   Clock,
+  Code,
   Edit3,
   ExternalLink,
+  Eye,
   FileText,
+  Flag,
   Link as LinkIcon,
   MapPin,
   MessageSquare,
   PartyPopper,
   Save,
+  Search,
+  Send,
+  Terminal,
   Trash2,
+  Users,
   X,
-  XCircle,
 } from "lucide-react";
 import { useJobs } from "../../hooks/useJobs";
-import type { Job } from "../../types";
+import Modal from "../../components/Modal";
+import { Tabs } from "../../components/Tabs";
+import Button from "../../components/Button";
+import type { Job, JobTrack, JobStatus } from "../../types";
 import { formatDate } from "../../utils/formatDate";
 import {
-  ArchiveButton,
-  ArchiveCard,
   BackButton,
   Container,
+  ContentSection,
+  EditField,
+  EditGrid,
+  EditLabel,
   FormActions,
+  HeaderMetaBlock,
+  HeaderMetaGroup,
+  HeaderTitleRow,
+  IconButton,
   InlineForm,
-  InfoCard,
-  InfoGrid,
-  InfoLabel,
-  InfoLink,
-  InfoValue,
   JobHeader,
   JobIdentity,
   Layout,
+  List,
+  ListEmpty,
+  ListItem,
+  ListItemText,
   Logo,
   MainColumn,
-  MetaItem,
-  MetaRow,
-  Notes,
+  OverviewBlock,
+  OverviewGrid,
+  OverviewItem,
+  OverviewLabel,
+  OverviewTitle,
+  OverviewValue,
   Page,
   Panel,
-  ReminderCard,
-  ReminderEyebrow,
-  ReminderIcon,
-  ReminderText,
-  ResourceButton,
-  ResourceList,
+  Paragraph,
+  SectionBody,
+  SectionCard,
+  SectionHeader,
   SectionTitle,
   Sidebar,
   SmallButton,
   StatusBadge,
+  SubTitle,
   TextArea,
   TextInput,
   TimelineConnector,
   TimelineIconWrapper,
   TimelineItem,
+  TimelineItemHeader,
   TimelineList,
   TimelineSubtitle,
   TimelineText,
   TimelineTitle,
   Title,
   TitleBlock,
-  List,
-  ListItem,
-  ListItemText,
-  ListEmpty,
-  EditableTitle,
-  EditField,
-  EditLabel,
-  EditGrid,
-  IconButton,
+  ResourceList,
+  BulletList,
+  BulletItem,
+  Notes,
+  ReminderCard,
+  ReminderEyebrow,
+  ReminderIcon,
   Select,
-  TimelineItemHeader,
 } from "./styles";
 
 type TimelineEvent = {
   title: string;
   subtitle: string;
-  icon: LucideIcon;
+  icon?: LucideIcon | "activity" | "check" | "clock";
 };
 
 type ResourceLink = {
@@ -91,37 +107,87 @@ type ResourceLink = {
   href?: string;
 };
 
-const statusToTone: Record<string, "yellow" | "green" | "blue"> = {
-  Entrevista: "yellow",
-  Aplicada: "blue",
-  Oferta: "green",
-  Recusada: "blue",
-  Ghosted: "blue",
+const statusToTone: Record<string, "yellow" | "green" | "blue" | "red" | "gray"> = {
+  Lead: "gray",
+  Applied: "blue",
+  Viewed: "blue",
+  Contacted: "yellow",
+  Interview: "yellow",
+  TechnicalTest: "yellow",
+  Offer: "green",
+  Accepted: "green",
+  Rejected: "red",
+  Withdrawn: "gray",
+  Closed: "gray",
 };
 
 const statusToIcon: Record<string, LucideIcon> = {
-  Entrevista: Clock,
-  Aplicada: CheckCircle2,
-  Oferta: CheckCircle2,
-  Recusada: Activity,
-  Ghosted: Activity,
+  Lead: Flag,
+  Applied: Send,
+  Viewed: Eye,
+  Contacted: MessageSquare,
+  Interview: Users,
+  TechnicalTest: Code,
+  Offer: FileText,
+  Accepted: CheckCircle2,
+  Rejected: X,
+  Withdrawn: ArrowLeft,
+  Closed: Flag,
 };
 
-const jobStatuses = ["Aplicada", "Entrevista", "Oferta", "Recusada", "Ghosted"];
-const jobTracks = [
-  "Full Stack",
-  "Frontend",
-  "Backend",
-  "Mobile",
-  "Design",
-  "Dados",
-];
+const trackLabels: Record<JobTrack, string> = {
+  AI: "IA / ML",
+  FULL_STACK: "Full Stack",
+  CLOUD: "Cloud",
+};
+
+const historyIconMap: Record<string, LucideIcon> = {
+  search: Search,
+  send: Send,
+  eye: Eye,
+  message: MessageSquare,
+  users: Users,
+  code: Code,
+  terminal: Terminal,
+  briefcase: Briefcase,
+  "file-text": FileText,
+  "check-circle": CheckCircle2,
+  flag: Flag,
+  check: CheckCircle2,
+  clock: Clock,
+  activity: Activity,
+};
+
+const PREDEFINED_EVENTS = [
+  { title: "Vaga identificada", icon: "search" },
+  { title: "Candidatura enviada", icon: "send" },
+  { title: "Candidatura visualizada", icon: "eye" },
+  { title: "Contato inicial", icon: "message" },
+  { title: "Entrevista RH", icon: "users" },
+  { title: "Teste técnico", icon: "code" },
+  { title: "Entrevista técnica", icon: "terminal" },
+  { title: "Entrevista final", icon: "briefcase" },
+  { title: "Proposta recebida", icon: "file-text" },
+  { title: "Proposta aceita", icon: "check-circle" },
+  { title: "Processo encerrado", icon: "flag" },
+] as const;
+
+const buildMetaState = (job: Job) => ({
+  company: job.company ?? "",
+  position: job.title ?? "",
+  track: job.track ?? "AI",
+  status: job.status,
+  date: job.date,
+  location: job.location ?? "Remoto",
+  externalLink: job.externalLink ?? "",
+});
 
 const DetalhesCandidatura = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const {
     jobs,
+    isLoading,
     updateJob,
     addHistoryEntry,
     addResource,
@@ -131,50 +197,44 @@ const DetalhesCandidatura = () => {
     toggleArchive,
   } = useJobs();
 
-  const jobId = Number(id);
-  const job = jobs.find((item) => item.id === jobId);
+  const job = useMemo(() => jobs.find((item) => item.id === id), [jobs, id]);
 
-  const [notesDraft, setNotesDraft] = useState(job?.notes ?? "");
+  const [notesDraft, setNotesDraft] = useState(
+    Array.isArray(job?.notes) ? job?.notes.join("\n") : job?.notes ?? ""
+  );
   const [newResource, setNewResource] = useState({ label: "", href: "" });
   const [newReminder, setNewReminder] = useState("");
   const [newHistory, setNewHistory] = useState({ title: "", subtitle: "" });
+  const [customTitle, setCustomTitle] = useState("");
   const [isEditingMeta, setIsEditingMeta] = useState(false);
-  const [metaDraft, setMetaDraft] = useState({
-    company: job?.company ?? "",
-    position: job?.position ?? "",
-    track: job?.track ?? "Frontend",
-    status: job?.status ?? "Aplicada",
-    date: job?.date ?? "",
-    location: job?.location ?? "Remoto",
-    externalLink: job?.externalLink ?? "",
-  });
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [activeEditTab, setActiveEditTab] = useState("basic");
+  const [editFormState, setEditFormState] = useState<Partial<Job>>({});
+  const notesRef = useRef<HTMLTextAreaElement | null>(null);
+  const [metaDraft, setMetaDraft] = useState(() =>
+    job
+      ? buildMetaState(job)
+      : { company: "", position: "", track: "AI" as JobTrack, status: "Aplicada", date: "", location: "Remoto", externalLink: "" }
+  );
 
   useEffect(() => {
-    setNotesDraft(job?.notes ?? "");
+    setNotesDraft(Array.isArray(job?.notes) ? job?.notes.join("\n") : job?.notes ?? "");
     if (job) {
-      setMetaDraft({
-        company: job.company,
-        position: job.position,
-        track: job.track,
-        status: job.status,
-        date: job.date,
-        location: job.location ?? "Remoto",
-        externalLink: job.externalLink ?? "",
-      });
+      setMetaDraft(buildMetaState(job));
     }
   }, [job]);
 
   const timelineEvents: TimelineEvent[] = useMemo(() => {
     if (!job)
       return [
-        { title: "Aplicação", subtitle: "-", icon: CheckCircle2 },
+        { title: "Aplicacao", subtitle: "-", icon: CheckCircle2 },
         { title: "Status atual", subtitle: "-", icon: Clock },
       ];
 
     const statusIcon = statusToIcon[job.status] ?? Clock;
     return [
       {
-        title: "Aplicação enviada",
+        title: "Aplicacao enviada",
         subtitle: formatDate(job.date),
         icon: CheckCircle2,
       },
@@ -193,7 +253,6 @@ const DetalhesCandidatura = () => {
   ];
 
   const handleBack = () => {
-    // Tenta voltar no histórico, mas se não houver histórico anterior, vai para o Dashboard
     if (window.history.state?.idx > 0) {
       navigate(-1);
     } else {
@@ -203,35 +262,41 @@ const DetalhesCandidatura = () => {
 
   const handleSaveNotes = () => {
     if (!job) return;
-    updateJob(job.id, { notes: notesDraft });
+    updateJob(job.id, {
+      notes: notesDraft
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    });
   };
 
-  const handleSaveMeta = async () => {
+  const handleSaveMeta = async (overrides?: Partial<typeof metaDraft>) => {
     if (!job) return;
 
-    const hasStatusChange = metaDraft.status !== job.status;
-    const hasDateChange = metaDraft.date !== job.date;
+    const nextDraft = { ...metaDraft, ...overrides };
+    const nextDate = nextDraft.date || job.date;
 
-    const patch = {
-      company: metaDraft.company,
-      position: metaDraft.position,
-      track: metaDraft.track,
-      status: metaDraft.status,
-      date: metaDraft.date || job.date,
-      location: metaDraft.location,
-      externalLink: metaDraft.externalLink,
-    } as Partial<Job>;
+    const hasStatusChange = nextDraft.status !== job.status;
+    const hasDateChange = nextDate !== job.date;
+
+    const patch: Partial<Job> = {
+      status: nextDraft.status as JobStatus,
+      date: nextDate,
+      location: nextDraft.location,
+      externalLink: nextDraft.externalLink,
+      track: nextDraft.track,
+      company: nextDraft.company,
+      title: nextDraft.position,
+    };
 
     let updatedHistory = job.history ? [...job.history] : undefined;
 
     if (hasDateChange) {
       const applicationIndex = updatedHistory?.findIndex(
-        (entry) => entry.title === "Aplicação enviada" || entry.icon === "check"
+        (entry) => entry.title === "Aplicacao enviada" || entry.icon === "check"
       );
 
-      const newCreatedAt = metaDraft.date
-        ? new Date(metaDraft.date).toISOString()
-        : job.date;
+      const newCreatedAt = nextDate ? new Date(nextDate).toISOString() : job.date;
 
       if (
         applicationIndex !== undefined &&
@@ -240,13 +305,13 @@ const DetalhesCandidatura = () => {
       ) {
         updatedHistory[applicationIndex] = {
           ...updatedHistory[applicationIndex],
-          subtitle: formatDate(metaDraft.date || job.date),
+          subtitle: formatDate(nextDate),
           createdAt: newCreatedAt,
         };
       } else {
         const applicationEntry = {
-          title: "Aplicação enviada",
-          subtitle: formatDate(metaDraft.date || job.date),
+          title: "Aplicacao enviada",
+          subtitle: formatDate(nextDate),
           icon: "check" as const,
           createdAt: newCreatedAt,
         };
@@ -257,14 +322,11 @@ const DetalhesCandidatura = () => {
     if (hasStatusChange) {
       const now = new Date().toISOString();
       const newHistoryEntry = {
-        title: `Status alterado para ${metaDraft.status}`,
-        subtitle: `Mudou de "${job.status}" para "${
-          metaDraft.status
-        }" em ${formatDate(now)}`,
+        title: `Status alterado para ${nextDraft.status}`,
+        subtitle: `Mudou de "${job.status}" para "${nextDraft.status}" em ${formatDate(now)}`,
         icon: "activity" as const,
         createdAt: now,
       };
-
       updatedHistory = [
         ...(updatedHistory ?? job.history ?? []),
         newHistoryEntry,
@@ -276,27 +338,66 @@ const DetalhesCandidatura = () => {
       ...(updatedHistory ? { history: updatedHistory } : {}),
     });
 
-    // Se apenas a data mudou, garante que o draft reflita o valor salvo
-    if (hasDateChange) {
-      setMetaDraft((prev) => ({ ...prev, date: patch.date as string }));
-    }
-
+    setMetaDraft({ ...nextDraft, date: nextDate });
     setIsEditingMeta(false);
   };
 
   const handleCancelMeta = () => {
     if (job) {
-      setMetaDraft({
-        company: job.company,
-        position: job.position,
-        track: job.track,
-        status: job.status,
-        date: job.date,
-        location: job.location ?? "Remoto",
-        externalLink: job.externalLink ?? "",
-      });
+      setMetaDraft(buildMetaState(job));
     }
     setIsEditingMeta(false);
+  };
+
+  const handleOpenEditModal = () => {
+    if (job) {
+      setEditFormState({
+        ...job,
+        responsibilities: job.responsibilities ?? [],
+        benefits: job.benefits ?? [],
+        notes: job.notes ?? [],
+        resources: job.resources ?? [],
+        reminders: job.reminders ?? [],
+        history: job.history ?? [],
+      });
+      setActiveEditTab("basic");
+      setIsEditModalOpen(true);
+    }
+  };
+
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditFormState({});
+  };
+
+  const handleSubmitEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!job) return;
+
+    // Remove campos vazios ou null para evitar erros de validação
+    const cleanedData = Object.entries(editFormState).reduce((acc, [key, value]) => {
+      // Não envia campos que são strings vazias, null ou undefined
+      if (value === "" || value === null || value === undefined) {
+        return acc;
+      }
+      // Não envia arrays vazios
+      if (Array.isArray(value) && value.length === 0) {
+        return acc;
+      }
+      acc[key] = value;
+      return acc;
+    }, {} as Partial<Job>);
+
+    console.log("Dados sendo enviados para update:", cleanedData);
+    
+    try {
+      await updateJob(job.id, cleanedData);
+      console.log("Update concluído com sucesso");
+      handleCloseEditModal();
+    } catch (error) {
+      console.error("Erro ao atualizar job:", error);
+      alert("Erro ao salvar alterações. Verifique o console para mais detalhes.");
+    }
   };
 
   const handleAddResource = (e: React.FormEvent) => {
@@ -315,13 +416,20 @@ const DetalhesCandidatura = () => {
 
   const handleAddHistory = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!job || !newHistory.title || !newHistory.subtitle) return;
+    const finalTitle = newHistory.title === "__custom__" ? customTitle : newHistory.title;
+    if (!job || !finalTitle || !newHistory.subtitle) return;
+    
+    const selectedEvent = PREDEFINED_EVENTS.find(ev => ev.title === newHistory.title);
+    const eventIcon = selectedEvent?.icon || "activity";
+    
     addHistoryEntry(job.id, {
-      ...newHistory,
-      icon: "activity",
+      title: finalTitle,
+      subtitle: newHistory.subtitle,
+      icon: eventIcon as any,
       createdAt: new Date().toISOString(),
     });
     setNewHistory({ title: "", subtitle: "" });
+    setCustomTitle("");
   };
 
   const handleRemoveHistory = (index: number) => {
@@ -329,6 +437,35 @@ const DetalhesCandidatura = () => {
     const newHistory = job.history.filter((_, i) => i !== index);
     updateJob(job.id, { history: newHistory });
   };
+
+  const resolveIcon = (icon: TimelineEvent["icon"]) => {
+    if (!icon) return Activity;
+    if (typeof icon === "string") {
+      return historyIconMap[icon] ?? Activity;
+    }
+    return icon;
+  };
+
+  if (isLoading) {
+    return (
+      <Page>
+        <Container>
+          <BackButton type="button" onClick={handleBack}>
+            <ArrowLeft size={18} /> Voltar
+          </BackButton>
+          <Panel>
+            <SectionTitle>
+              <Activity size={20} />
+              Carregando...
+            </SectionTitle>
+            <Notes>
+              Estamos carregando os dados da candidatura. Por favor, aguarde.
+            </Notes>
+          </Panel>
+        </Container>
+      </Page>
+    );
+  }
 
   if (!job) {
     return (
@@ -340,10 +477,10 @@ const DetalhesCandidatura = () => {
           <Panel>
             <SectionTitle>
               <Activity size={20} />
-              Candidatura não encontrada
+              Candidatura nao encontrada
             </SectionTitle>
             <Notes>
-              Não localizamos os dados da candidatura. Tente voltar e selecionar
+              Nao localizamos os dados da candidatura. Tente voltar e selecionar
               outra vaga.
             </Notes>
           </Panel>
@@ -362,14 +499,211 @@ const DetalhesCandidatura = () => {
 
         <Layout>
           <MainColumn>
+
             <Panel>
+              <JobHeader>
+                <JobIdentity>
+                  <Logo>
+                    <Building2 size={36} />
+                  </Logo>
+                  <TitleBlock>
+                    <HeaderTitleRow>
+                      <Title>{metaDraft.position}</Title>
+                      <StatusBadge tone={statusToTone[job.status] ?? "blue"}>
+                        {job.status}
+                      </StatusBadge>
+                    </HeaderTitleRow>
+                    <HeaderMetaBlock>
+                      <HeaderMetaGroup>
+                        <Briefcase size={14} />
+                        {metaDraft.track && trackLabels[metaDraft.track as JobTrack]}
+                      </HeaderMetaGroup>
+                      <HeaderMetaGroup>
+                        <Building2 size={14} />
+                        {metaDraft.company}
+                      </HeaderMetaGroup>
+                      <HeaderMetaGroup>
+                        <MapPin size={14} />
+                        {metaDraft.location ?? "Remoto"}
+                      </HeaderMetaGroup>
+                      <HeaderMetaGroup>
+                        <Calendar size={14} />
+                        {formatDate(job.date)}
+                      </HeaderMetaGroup>
+                      {job.postedAt && (
+                        <HeaderMetaGroup>
+                          <Clock size={14} />
+                          Publicada em {formatDate(job.postedAt)}
+                        </HeaderMetaGroup>
+                      )}
+                    </HeaderMetaBlock>
+                  </TitleBlock>
+                </JobIdentity>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                  <IconButton
+                    type="button"
+                    onClick={handleOpenEditModal}
+                    title="Editar candidatura"
+                  >
+                    <Edit3 size={18} />
+                  </IconButton>
+                  {metaDraft.externalLink && (
+                    <IconButton
+                      type="button"
+                      as="a"
+                      href={metaDraft.externalLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Ver anuncio original"
+                    >
+                      <ExternalLink size={18} />
+                    </IconButton>
+                  )}
+                </div>
+              </JobHeader>
+            </Panel>
+
+            <Panel>
+              <SectionHeader>
+                <SectionTitle>
+                  <BriefcaseBusiness size={20} />
+                  Sobre a vaga
+                </SectionTitle>
+                <OverviewTitle>Overview of the role</OverviewTitle>
+              </SectionHeader>
+
+              <OverviewBlock>
+                <OverviewGrid>
+                  {job.title && (
+                    <OverviewItem>
+                      <OverviewLabel>Position</OverviewLabel>
+                      <OverviewValue>{job.title}</OverviewValue>
+                    </OverviewItem>
+                  )}
+                  {job.company && (
+                    <OverviewItem>
+                      <OverviewLabel>Company</OverviewLabel>
+                      <OverviewValue>{job.company}</OverviewValue>
+                    </OverviewItem>
+                  )}
+                  {job.location && (
+                    <OverviewItem>
+                      <OverviewLabel>Location</OverviewLabel>
+                      <OverviewValue>{job.location}</OverviewValue>
+                    </OverviewItem>
+                  )}
+                  {job.workModel && (
+                    <OverviewItem>
+                      <OverviewLabel>Work Model</OverviewLabel>
+                      <OverviewValue>{job.workModel}</OverviewValue>
+                    </OverviewItem>
+                  )}
+                  {job.employmentType && (
+                    <OverviewItem>
+                      <OverviewLabel>Employment Type</OverviewLabel>
+                      <OverviewValue>{job.employmentType}</OverviewValue>
+                    </OverviewItem>
+                  )}
+                  {job.seniority && (
+                    <OverviewItem>
+                      <OverviewLabel>Seniority Level</OverviewLabel>
+                      <OverviewValue>{job.seniority}</OverviewValue>
+                    </OverviewItem>
+                  )}
+                  {job.postedAt && (
+                    <OverviewItem>
+                      <OverviewLabel>Posted at</OverviewLabel>
+                      <OverviewValue>{formatDate(job.postedAt)}</OverviewValue>
+                    </OverviewItem>
+                  )}
+                </OverviewGrid>
+              </OverviewBlock>
+
+              <SectionCard>
+                <SectionBody>
+                  {job.description && job.description.trim().length > 0 && (
+                    <ContentSection>
+                      <SubTitle>Descricao</SubTitle>
+                      {job.description
+                        .split(/\n{2,}/)
+                        .filter((paragraph) => paragraph.trim().length > 0)
+                        .map((paragraph, idx) => (
+                          <Paragraph key={idx}>{paragraph.trim()}</Paragraph>
+                        ))}
+                    </ContentSection>
+                  )}
+
+                  {job.responsibilities && job.responsibilities.length > 0 && (
+                    <ContentSection>
+                      <SubTitle>Responsabilidades</SubTitle>
+                      <BulletList>
+                        {job.responsibilities.map((resp, idx) => (
+                          <BulletItem key={idx}>{resp}</BulletItem>
+                        ))}
+                      </BulletList>
+                    </ContentSection>
+                  )}
+
+                  {job.benefits && job.benefits.length > 0 && (
+                    <ContentSection>
+                      <SubTitle>Beneficios</SubTitle>
+                      <BulletList>
+                        {job.benefits.map((benefit, idx) => (
+                          <BulletItem key={idx}>{benefit}</BulletItem>
+                        ))}
+                      </BulletList>
+                    </ContentSection>
+                  )}
+
+                  {job.additionalInfo && job.additionalInfo.trim().length > 0 && (
+                    <ContentSection>
+                      <SubTitle>Informacoes adicionais</SubTitle>
+                      {job.additionalInfo
+                        .split(/\n{2,}/)
+                        .filter((paragraph) => paragraph.trim().length > 0)
+                        .map((paragraph, idx) => (
+                          <Paragraph key={idx}>{paragraph.trim()}</Paragraph>
+                        ))}
+                    </ContentSection>
+                  )}
+                </SectionBody>
+              </SectionCard>
+            </Panel>
+
+            <Panel>
+              <SectionTitle>
+                <MessageSquare size={20} />
+                Anotacoes do candidato
+              </SectionTitle>
+              <Notes>
+                <TextArea
+                  ref={notesRef}
+                  value={notesDraft}
+                  onChange={(e) => setNotesDraft(e.target.value)}
+                  placeholder="Adicione anotacoes sobre a candidatura..."
+                />
+                <FormActions style={{ marginTop: 10 }}>
+                  <SmallButton
+                    type="button"
+                    variant="primary"
+                    onClick={handleSaveNotes}
+                  >
+                    Salvar anotacoes
+                  </SmallButton>
+                </FormActions>
+              </Notes>
+            </Panel>
+          </MainColumn>
+
+          <Sidebar>
+            <Panel style={{ border: "2px solid #6366f1", borderRadius: "12px" }}>
+              <SectionTitle style={{ marginBottom: "20px", textTransform: "uppercase", fontSize: "14px", fontWeight: "700", letterSpacing: "0.05em" }}>
+                Gestao da Candidatura
+              </SectionTitle>
+
               {isEditingMeta ? (
                 <>
-                  <SectionTitle>
-                    <Edit3 size={20} />
-                    Editando Metadados
-                  </SectionTitle>
-                  <EditGrid>
+                  <EditGrid style={{ marginBottom: "20px" }}>
                     <EditField>
                       <EditLabel>Empresa</EditLabel>
                       <TextInput
@@ -393,7 +727,7 @@ const DetalhesCandidatura = () => {
                             position: e.target.value,
                           })
                         }
-                        placeholder="Título da vaga"
+                        placeholder="Titulo da vaga"
                       />
                     </EditField>
                     <EditField>
@@ -403,13 +737,13 @@ const DetalhesCandidatura = () => {
                         onChange={(e) =>
                           setMetaDraft({
                             ...metaDraft,
-                            track: e.target.value as any,
+                            track: e.target.value as JobTrack,
                           })
                         }
                       >
-                        {jobTracks.map((track) => (
+                        {Object.entries(trackLabels).map(([track, label]) => (
                           <option key={track} value={track}>
-                            {track}
+                            {label}
                           </option>
                         ))}
                       </Select>
@@ -425,15 +759,21 @@ const DetalhesCandidatura = () => {
                           })
                         }
                       >
-                        {jobStatuses.map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
+                        <option value="Lead">Lead (Salva)</option>
+                        <option value="Applied">Aplicada</option>
+                        <option value="Viewed">Visualizada</option>
+                        <option value="Contacted">Contatado</option>
+                        <option value="Interview">Entrevista</option>
+                        <option value="TechnicalTest">Teste Tecnico</option>
+                        <option value="Offer">Oferta</option>
+                        <option value="Accepted">Aceita</option>
+                        <option value="Rejected">Rejeitado</option>
+                        <option value="Withdrawn">Retirada</option>
+                        <option value="Closed">Encerrada</option>
                       </Select>
                     </EditField>
                     <EditField>
-                      <EditLabel>Data de Aplicação</EditLabel>
+                      <EditLabel>Data de Aplicacao</EditLabel>
                       <TextInput
                         type="date"
                         value={metaDraft.date}
@@ -443,7 +783,7 @@ const DetalhesCandidatura = () => {
                       />
                     </EditField>
                     <EditField>
-                      <EditLabel>Localização</EditLabel>
+                      <EditLabel>Localizacao</EditLabel>
                       <TextInput
                         value={metaDraft.location}
                         onChange={(e) =>
@@ -452,7 +792,7 @@ const DetalhesCandidatura = () => {
                             location: e.target.value,
                           })
                         }
-                        placeholder="Remoto, São Paulo, etc."
+                        placeholder="Remoto, Sao Paulo, etc."
                       />
                     </EditField>
                     <EditField style={{ gridColumn: "1 / -1" }}>
@@ -473,7 +813,7 @@ const DetalhesCandidatura = () => {
                     <SmallButton
                       type="button"
                       variant="primary"
-                      onClick={handleSaveMeta}
+                      onClick={() => handleSaveMeta()}
                     >
                       <Save size={16} /> Salvar
                     </SmallButton>
@@ -486,111 +826,90 @@ const DetalhesCandidatura = () => {
                     </SmallButton>
                   </FormActions>
                 </>
+
               ) : (
                 <>
-                  <JobHeader>
-                    <JobIdentity>
-                      <Logo>
-                        <Building2 size={32} />
-                      </Logo>
-                      <TitleBlock>
-                        <EditableTitle>
-                          <Title>{job.position}</Title>
-                          <IconButton
-                            type="button"
-                            onClick={() => setIsEditingMeta(true)}
-                            title="Editar metadados"
-                          >
-                            <Edit3 size={16} />
-                          </IconButton>
-                        </EditableTitle>
-                        <MetaRow>
-                          <MetaItem>
-                            <Building2 size={14} /> {job.company}
-                          </MetaItem>
-                          <MetaItem>
-                            <MapPin size={14} /> {job.location ?? "Remoto"}
-                          </MetaItem>
-                        </MetaRow>
-                      </TitleBlock>
-                    </JobIdentity>
-                    <StatusBadge tone={statusToTone[job.status] ?? "blue"}>
-                      {job.status}
-                    </StatusBadge>
-                  </JobHeader>
+                  <EditField style={{ marginBottom: "16px" }}>
+                    <EditLabel>Versao do CV</EditLabel>
+                    <TextInput
+                      value={job.cvVersion || ""}
+                      readOnly
+                      placeholder="CV_FullStack_v3"
+                    />
+                  </EditField>
 
-                  <InfoGrid>
-                    <InfoCard>
-                      <InfoLabel>Data de Aplicação</InfoLabel>
-                      <InfoValue>
-                        <Calendar size={14} /> {formatDate(job.date)}
-                      </InfoValue>
-                    </InfoCard>
+                  {null /* Campo 'Mensagem Enviada?' removido para alinhar com schema backend */}
 
-                    <InfoCard>
-                      <InfoLabel>Trilha principal</InfoLabel>
-                      <InfoValue>{job.track}</InfoValue>
-                    </InfoCard>
+                  <EditField style={{ marginBottom: "16px" }}>
+                    <EditLabel>Proxima Fase</EditLabel>
+                    <Select
+                      value={metaDraft.status}
+                      onChange={(e) => {
+                        const nextStatus = e.target.value as JobStatus;
+                        setMetaDraft({
+                          ...metaDraft,
+                          status: nextStatus,
+                        });
+                        handleSaveMeta({ status: nextStatus });
+                      }}
+                    >
+                      <option value="Lead">Lead (Salva)</option>
+                      <option value="Applied">Aplicada</option>
+                      <option value="Viewed">Visualizada</option>
+                      <option value="Contacted">Contatado</option>
+                      <option value="Interview">Entrevista</option>
+                      <option value="TechnicalTest">Teste Tecnico</option>
+                      <option value="Offer">Oferta</option>
+                      <option value="Accepted">Aceita</option>
+                      <option value="Rejected">Rejeitado</option>
+                      <option value="Withdrawn">Retirada</option>
+                      <option value="Closed">Encerrada</option>
+                    </Select>
+                  </EditField>
 
-                    <InfoCard>
-                      <InfoLabel>Link Externo</InfoLabel>
-                      {job.externalLink ? (
-                        <InfoLink
-                          href={job.externalLink}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <ExternalLink size={14} /> Ver anúncio original
-                        </InfoLink>
-                      ) : (
-                        <InfoValue>—</InfoValue>
-                      )}
-                    </InfoCard>
-                  </InfoGrid>
-                </>
-              )}
-
-              <SectionTitle>
-                <MessageSquare size={20} />
-                Anotações do Candidato
-              </SectionTitle>
-              <Notes>
-                <TextArea
-                  value={notesDraft}
-                  onChange={(e) => setNotesDraft(e.target.value)}
-                  placeholder="Adicione anotações sobre a candidatura..."
-                />
-                <FormActions style={{ marginTop: 10 }}>
                   <SmallButton
                     type="button"
                     variant="primary"
-                    onClick={handleSaveNotes}
+                    style={{ width: "100%", marginBottom: "16px" }}
+                    onClick={() => {
+                      notesRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      notesRef.current?.focus();
+                    }}
                   >
-                    Salvar anotações
+                    Adicionar nota
                   </SmallButton>
-                </FormActions>
-              </Notes>
+
+                  <SmallButton
+                    type="button"
+                    variant="ghost"
+                    style={{ width: "100%" }}
+                    onClick={() => job && toggleArchive(job.id)}
+                  >
+                    {job.archived ? "Desarquivar" : "Arquivar"} Candidatura
+                  </SmallButton>
+                </>
+              )}
             </Panel>
 
             <Panel>
               <SectionTitle>
                 <Clock size={20} />
-                Histórico do Processo
+                Linha do tempo
               </SectionTitle>
               <TimelineList>
                 {(job.history ?? timelineEvents).map((event, index, arr) => {
-                  const isCustomEvent =
-                    job.history && index < job.history.length;
-                  const displaySubtitle = event.createdAt
-                    ? `${event.subtitle} • Criado em ${formatDate(
-                        event.createdAt
+                  const isCustomEvent = job.history && index < job.history.length;
+                  const Icon = resolveIcon(event.icon);
+                  const displaySubtitle = (event as any).createdAt
+                    ? `${event.subtitle} ? Criado em ${formatDate(
+                        (event as any).createdAt as string
                       )}`
                     : event.subtitle;
                   return (
                     <TimelineItem key={`${event.title}-${index}`}>
                       {index < arr.length - 1 && <TimelineConnector />}
                       <TimelineIconWrapper>
-                        <event.icon size={14} />
+                        <Icon size={14} />
                       </TimelineIconWrapper>
                       <TimelineItemHeader>
                         <TimelineText>
@@ -612,15 +931,34 @@ const DetalhesCandidatura = () => {
                 })}
               </TimelineList>
               <InlineForm onSubmit={handleAddHistory} style={{ marginTop: 12 }}>
-                <TextInput
-                  placeholder="Título do evento"
+                <Select
                   value={newHistory.title}
-                  onChange={(e) =>
-                    setNewHistory((p) => ({ ...p, title: e.target.value }))
-                  }
-                />
+                  onChange={(e) => {
+                    setNewHistory((p) => ({ ...p, title: e.target.value }));
+                    if (e.target.value !== "__custom__") {
+                      setCustomTitle("");
+                    }
+                  }}
+                  required
+                >
+                  <option value="">Selecione o evento</option>
+                  {PREDEFINED_EVENTS.map((event) => (
+                    <option key={event.title} value={event.title}>
+                      {event.title}
+                    </option>
+                  ))}
+                  <option value="__custom__">+ Titulo personalizado</option>
+                </Select>
+                {newHistory.title === "__custom__" && (
+                  <TextInput
+                    placeholder="Digite o titulo personalizado"
+                    value={customTitle}
+                    onChange={(e) => setCustomTitle(e.target.value)}
+                    required
+                  />
+                )}
                 <TextInput
-                  placeholder="Descrição / data"
+                  placeholder="Descricao / data"
                   value={newHistory.subtitle}
                   onChange={(e) =>
                     setNewHistory((p) => ({ ...p, subtitle: e.target.value }))
@@ -631,9 +969,7 @@ const DetalhesCandidatura = () => {
                 </SmallButton>
               </InlineForm>
             </Panel>
-          </MainColumn>
 
-          <Sidebar>
             <Panel>
               <SectionTitle>
                 <LinkIcon size={20} />
@@ -692,7 +1028,7 @@ const DetalhesCandidatura = () => {
             </Panel>
 
             <ReminderCard>
-              <ReminderEyebrow>Lembrete Estratégico</ReminderEyebrow>
+              <ReminderEyebrow>Lembrete Estrategico</ReminderEyebrow>
               <List style={{ color: "#fff" }}>
                 {(job.reminders ?? []).length === 0 && (
                   <ListEmpty style={{ color: "#e5e7eb" }}>
@@ -738,27 +1074,403 @@ const DetalhesCandidatura = () => {
                 <PartyPopper size={120} />
               </ReminderIcon>
             </ReminderCard>
-
-            <ArchiveCard>
-              <ArchiveButton
-                type="button"
-                onClick={() => job && toggleArchive(job.id)}
-              >
-                {job.archived
-                  ? "Desarquivar Candidatura"
-                  : "Arquivar Candidatura"}
-              </ArchiveButton>
-              {job.archived && (
-                <ListEmpty style={{ marginTop: 8 }}>
-                  Esta candidatura está arquivada.
-                </ListEmpty>
-              )}
-            </ArchiveCard>
           </Sidebar>
         </Layout>
       </Container>
+
+      {/* Modal de Edicao Completa */}
+      <Modal
+        open={isEditModalOpen}
+        onClose={handleCloseEditModal}
+        title="Editar Candidatura"
+        footer={
+          <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+            <Button type="submit" form="edit-job-form">
+              Salvar Alterações
+            </Button>
+            <Button variant="ghost" onClick={handleCloseEditModal}>
+              Cancelar
+            </Button>
+          </div>
+        }
+      >
+        <form id="edit-job-form" onSubmit={handleSubmitEdit}>
+          <div style={{ maxHeight: "600px", overflow: "auto", paddingRight: "8px" }}>
+            <Tabs
+              tabs={[
+                {
+                  id: "basic",
+                  label: "Básico",
+                  content: (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                      <EditField>
+                        <EditLabel>Nome da Empresa *</EditLabel>
+                        <TextInput
+                          required
+                          value={editFormState.company || ""}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              company: e.target.value,
+                            }))
+                          }
+                          placeholder="Ex: Google, Nubank..."
+                        />
+                      </EditField>
+
+                      <EditField>
+                        <EditLabel>Cargo *</EditLabel>
+                        <TextInput
+                          required
+                          value={editFormState.title || ""}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              title: e.target.value,
+                            }))
+                          }
+                          placeholder="Ex: UX Designer"
+                        />
+                      </EditField>
+
+                      <EditField>
+                        <EditLabel>Trilha *</EditLabel>
+                        <Select
+                          value={editFormState.track || "AI"}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              track: e.target.value as JobTrack,
+                            }))
+                          }
+                        >
+                          {Object.entries(trackLabels).map(([track, label]) => (
+                            <option key={track} value={track}>
+                              {label}
+                            </option>
+                          ))}
+                        </Select>
+                      </EditField>
+
+                      <EditField>
+                        <EditLabel>Status *</EditLabel>
+                        <Select
+                          value={editFormState.status || "Applied"}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              status: e.target.value as JobStatus,
+                            }))
+                          }
+                        >
+                          <option value="Lead">Lead (Salva)</option>
+                          <option value="Applied">Aplicada</option>
+                          <option value="Viewed">Visualizada</option>
+                          <option value="Contacted">Contatado</option>
+                          <option value="Interview">Entrevista</option>
+                          <option value="TechnicalTest">Teste Técnico</option>
+                          <option value="Offer">Oferta</option>
+                          <option value="Accepted">Aceita</option>
+                          <option value="Rejected">Rejeitado</option>
+                          <option value="Withdrawn">Retirada</option>
+                          <option value="Closed">Encerrada</option>
+                        </Select>
+                      </EditField>
+
+                      <EditField>
+                        <EditLabel>Data de Aplicacao *</EditLabel>
+                        <TextInput
+                          type="date"
+                          required
+                          value={editFormState.date || ""}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({ ...prev, date: e.target.value }))
+                          }
+                        />
+                      </EditField>
+
+                      <EditField>
+                        <EditLabel>Localizacao</EditLabel>
+                        <TextInput
+                          value={editFormState.location || ""}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              location: e.target.value,
+                            }))
+                          }
+                          placeholder="Ex: Remoto, Sao Paulo..."
+                        />
+                      </EditField>
+
+                      <EditField style={{ gridColumn: "1 / -1" }}>
+                        <EditLabel>Link Externo</EditLabel>
+                        <TextInput
+                          type="url"
+                          value={editFormState.externalLink || ""}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              externalLink: e.target.value,
+                            }))
+                          }
+                          placeholder="https://..."
+                        />
+                      </EditField>
+                    </div>
+                  ),
+                },
+                {
+                  id: "details",
+                  label: "Detalhes",
+                  content: (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      <EditField>
+                        <EditLabel>Descrição da Vaga</EditLabel>
+                        <TextArea
+                          value={editFormState.description || ""}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              description: e.target.value,
+                            }))
+                          }
+                          placeholder="Resumo geral sobre a vaga..."
+                          rows={3}
+                        />
+                      </EditField>
+
+                      <EditField>
+                        <EditLabel>Responsabilidades (uma por linha)</EditLabel>
+                        <TextArea
+                          value={(editFormState.responsibilities || []).join("\n")}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              responsibilities: e.target.value
+                                .split("\n")
+                                .map((s) => s.trim())
+                                .filter(Boolean),
+                            }))
+                          }
+                          placeholder="Ex: Desenvolver features&#10;Revisar PRs&#10;Mentorear junior"
+                          rows={4}
+                        />
+                      </EditField>
+
+                      <EditField>
+                        <EditLabel>Benefícios (um por linha)</EditLabel>
+                        <TextArea
+                          value={(editFormState.benefits || []).join("\n")}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              benefits: e.target.value
+                                .split("\n")
+                                .map((s) => s.trim())
+                                .filter(Boolean),
+                            }))
+                          }
+                          placeholder="Ex: Vale refeição&#10;Gympass&#10;Desenvolvimento contínuo"
+                          rows={3}
+                        />
+                      </EditField>
+
+                      <EditField>
+                        <EditLabel>Informações Adicionais</EditLabel>
+                        <TextArea
+                          value={editFormState.additionalInfo || ""}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              additionalInfo: e.target.value,
+                            }))
+                          }
+                          placeholder="Outros detalhes relevantes sobre a vaga..."
+                          rows={3}
+                        />
+                      </EditField>
+
+                      <EditField>
+                        <EditLabel>Notas internas (uma por linha)</EditLabel>
+                        <TextArea
+                          value={(editFormState.notes || []).join("\n")}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              notes: e.target.value
+                                .split("\n")
+                                .map((s) => s.trim())
+                                .filter(Boolean),
+                            }))
+                          }
+                          placeholder="Ex: Falei com o recrutador na segunda"
+                          rows={3}
+                        />
+                      </EditField>
+                    </div>
+                  ),
+                },
+                {
+                  id: "hiring",
+                  label: "Contratação",
+                  content: (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                      <EditField>
+                        <EditLabel>Modelo de Trabalho</EditLabel>
+                        <Select
+                          value={editFormState.workModel || "remote"}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              workModel: e.target.value as "remote" | "hybrid" | "on-site",
+                            }))
+                          }
+                        >
+                          <option value="remote">Remote</option>
+                          <option value="hybrid">Hybrid</option>
+                          <option value="on-site">On-site</option>
+                        </Select>
+                      </EditField>
+
+                      <EditField>
+                        <EditLabel>Tipo de Contratacao</EditLabel>
+                        <Select
+                          value={editFormState.employmentType || "Unknown"}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              employmentType: e.target.value as "FullTime" | "PartTime" | "Contract" | "Internship" | "Unknown",
+                            }))
+                          }
+                        >
+                          <option value="FullTime">FullTime</option>
+                          <option value="PartTime">PartTime</option>
+                          <option value="Contract">Contract</option>
+                          <option value="Internship">Internship</option>
+                          <option value="Unknown">Unknown</option>
+                        </Select>
+                      </EditField>
+
+                      <EditField>
+                        <EditLabel>Senioridade</EditLabel>
+                        <Select
+                          value={editFormState.seniority || "Unknown"}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              seniority: e.target.value as "Intern" | "Junior" | "Mid" | "Senior" | "Lead" | "Unknown",
+                            }))
+                          }
+                        >
+                          <option value="Intern">Intern</option>
+                          <option value="Junior">Junior</option>
+                          <option value="Mid">Mid</option>
+                          <option value="Senior">Senior</option>
+                          <option value="Lead">Lead</option>
+                          <option value="Unknown">Unknown</option>
+                        </Select>
+                      </EditField>
+
+                      <EditField style={{ gridColumn: "1 / -1" }}>
+                        <EditLabel>Recrutador(a)</EditLabel>
+                        <TextInput
+                          value={editFormState.recruiterName || ""}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              recruiterName: e.target.value,
+                            }))
+                          }
+                          placeholder="Nome do contato do recrutador"
+                        />
+                      </EditField>
+
+                      <EditField style={{ gridColumn: "1 / -1" }}>
+                        <EditLabel>Data de Postagem</EditLabel>
+                        <TextInput
+                          type="datetime-local"
+                          value={editFormState.postedAt || ""}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              postedAt: e.target.value,
+                            }))
+                          }
+                        />
+                      </EditField>
+                    </div>
+                  ),
+                },
+                {
+                  id: "operations",
+                  label: "Operação",
+                  content: (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                      <EditField>
+                        <EditLabel>Prioridade</EditLabel>
+                        <Select
+                          value={editFormState.priority || "P2"}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({
+                              ...prev,
+                              priority: e.target.value as "P1" | "P2" | "P3",
+                            }))
+                          }
+                        >
+                          <option value="P1">P1</option>
+                          <option value="P2">P2</option>
+                          <option value="P3">P3</option>
+                        </Select>
+                      </EditField>
+
+                      <EditField>
+                        <EditLabel>Versao do CV</EditLabel>
+                        <TextInput
+                          value={editFormState.cvVersion || ""}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({ ...prev, cvVersion: e.target.value }))
+                          }
+                          placeholder="Ex: CV_AI_v3"
+                        />
+                      </EditField>
+
+                      <EditField>
+                        <EditLabel>
+                          <input
+                            type="checkbox"
+                            checked={!!editFormState.archived}
+                            onChange={(e) =>
+                              setEditFormState((prev) => ({ ...prev, archived: e.target.checked }))
+                            }
+                          />
+                          {" Arquivado"}
+                        </EditLabel>
+                      </EditField>
+
+                      <EditField>
+                        <EditLabel>Proximo follow-up</EditLabel>
+                        <TextInput
+                          type="datetime-local"
+                          value={editFormState.nextFollowUpAt || ""}
+                          onChange={(e) =>
+                            setEditFormState((prev) => ({ ...prev, nextFollowUpAt: e.target.value }))
+                          }
+                        />
+                      </EditField>
+                    </div>
+                  ),
+                },
+              ]}
+              activeTab={activeEditTab}
+              onTabChange={setActiveEditTab}
+            />
+          </div>
+        </form>
+      </Modal>
     </Page>
   );
 };
 
 export default DetalhesCandidatura;
+

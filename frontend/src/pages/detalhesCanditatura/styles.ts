@@ -3,7 +3,7 @@ import styled, { css } from "styled-components";
 export const Page = styled.div`
   min-height: 100vh;
   padding: 48px 0 64px;
-  background: ${({ theme }) => theme.gradients.header};
+  background: #f5f7fb;
 `;
 
 export const Container = styled.div`
@@ -55,12 +55,11 @@ export const Sidebar = styled.div`
 `;
 
 export const Panel = styled.div`
-  background: ${({ theme }) => theme.glass.panel};
-  border: 1px solid ${({ theme }) => theme.glass.border};
+  background: #fff;
+  border: 1px solid #e5e7eb;
   border-radius: ${({ theme }) => theme.radii.xl};
   padding: 24px;
-  box-shadow: ${({ theme }) => theme.glass.shadow};
-  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
 `;
 
 export const JobHeader = styled.div`
@@ -137,9 +136,19 @@ const badgeStyles = {
     color: #4338ca;
     border-color: #c7d2fe;
   `,
+  red: css`
+    background: #fee2e2;
+    color: #b91c1c;
+    border-color: #fca5a5;
+  `,
+  gray: css`
+    background: #f3f4f6;
+    color: #6b7280;
+    border-color: #d1d5db;
+  `,
 };
 
-export const StatusBadge = styled.span<{ tone?: "yellow" | "green" | "blue" }>`
+export const StatusBadge = styled.span<{ tone?: "yellow" | "green" | "blue" | "red" | "gray" }>`
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -217,14 +226,94 @@ export const SectionTitle = styled.h2`
   }
 `;
 
+export const OverviewBlock = styled.div`
+  margin-top: 6px;
+  padding: 18px 18px 12px;
+  border-radius: ${({ theme }) => theme.radii.lg};
+  border: 1px solid ${({ theme }) => theme.glass.border};
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(249, 250, 251, 0.9) 100%);
+  box-shadow: 0 8px 24px -18px rgba(0, 0, 0, 0.2);
+`;
+
+export const OverviewTitle = styled.h3`
+  margin: 0 0 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 15px;
+  font-weight: 800;
+  color: ${({ theme }) => theme.colors.text};
+  letter-spacing: 0.01em;
+`;
+
+export const OverviewGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+`;
+
+export const OverviewItem = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+`;
+
+export const OverviewLabel = styled.span`
+  font-size: 12px;
+  font-weight: 700;
+  color: ${({ theme }) => theme.colors.muted};
+  letter-spacing: 0.01em;
+`;
+
+export const OverviewValue = styled.span`
+  font-size: 14px;
+  font-weight: 700;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+export const ContentSection = styled.div`
+  margin-top: 22px;
+  &:first-of-type {
+    margin-top: 18px;
+  }
+`;
+
+export const SubTitle = styled.h3`
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 800;
+  color: ${({ theme }) => theme.colors.text};
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 8px;
+`;
+
+export const Paragraph = styled.p`
+  margin: 0 0 10px;
+  line-height: 1.8;
+  color: #4b5563;
+  font-size: 14px;
+  text-align: justify;
+`;
+
+export const BulletList = styled.ul`
+  margin: 0;
+  padding-left: 22px;
+  font-size: 14px;
+  line-height: 1.8;
+  color: #4b5563;
+`;
+
+export const BulletItem = styled.li`
+  margin-bottom: 6px;
+`;
+
 export const Notes = styled.div`
   color: ${({ theme }) => theme.colors.muted};
   line-height: 1.7;
   font-size: 14px;
-  background: rgba(255, 255, 255, 0.6);
+  background: #f8fafc;
   padding: 16px;
   border-radius: ${({ theme }) => theme.radii.lg};
-  border: 1px solid ${({ theme }) => theme.glass.border};
+  border: 1px solid #e5e7eb;
 `;
 
 export const TextArea = styled.textarea`
@@ -576,3 +665,52 @@ export const TimelineItemHeader = styled.div`
   flex: 1;
   gap: 8px;
 `;
+export const HeaderTitleRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+`;
+
+export const HeaderMetaBlock = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+  color: ${({ theme }) => theme.colors.muted};
+  font-weight: 600;
+  font-size: 13px;
+`;
+
+export const HeaderMetaGroup = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: ${({ theme }) => theme.radii.full};
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+`;
+
+export const SectionHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+`;
+
+export const SectionCard = styled.div`
+  border: 1px solid #e5e7eb;
+  border-radius: ${({ theme }) => theme.radii.lg};
+  background: #f8fafc;
+  padding: 16px;
+`;
+
+export const SectionBody = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+`;
+

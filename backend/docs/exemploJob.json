@@ -1,0 +1,105 @@
+{
+  "ownerId": "694c1804f160cbfb9c011233",
+  "title": "Junior Python Developer - Remote",
+  "company": "INDI Staffing Services",
+  "track": "FULL_STACK",
+  "date": "2025-12-24T12:00:00.000Z",
+  "status": "Applied",
+  "location": "Brazil",
+  "externalLink": "https://www.linkedin.com/jobs/view/4345994760/",
+  "employmentType": "FullTime",
+  "workModel": "remote",
+  "seniority": "Junior",
+  "description": "At INDI, we're passionate about empowering individuals and businesses worldwide. We are looking for Junior Python Developers to join our Development team and participate in different projects made up of multicultural teams distributed throughout the world. We want proactive people, passionate about programming in this language, oriented to provide the best experience to end users. You'll face numerous technical challenges, use current technologies, and get involved in building web and mobile applications, devices, etc.",
+  "responsibilities": [
+    "Create automation systems and tools to configure, monitor, and orchestrate data infrastructure and pipelines.",
+    "Create data integration services to help onboard new customers as quickly as possible.",
+    "Maintain ongoing reliability, performance, and support of the data infrastructure, providing solutions based on application needs and anticipated growth."
+  ],
+  "benefits": [
+    "Flexibility: Choose where and how you work.",
+    "Paid Time Off: Vacations and parental leave.",
+    "Excellent Compensation in USD.",
+    "Hardware provided.",
+    "Learning: Mentorship and growth opportunities.",
+    "Diversity & Inclusion: Collaborative environment."
+  ],
+  "additionalInfo": "Requirements: 1+ years of experience in Python and Django development; OOP experience desirable; experience using other programming languages; good skills with XML and relational databases (Oracle/MS SQL/MySQL); strong professional experience working with large data structures (including XML) and algorithms; advanced English level.",
+  "notes": ["Recruiter shown on LinkedIn: Margareth Martins de Almeida."],
+  "recruiterName": "Margareth Martins de Almeida",
+  "postedAt": "2025-12-25T11:00:00.000Z",
+  "priority": "P2",
+  "cvVersion": "CV_PY_v1",
+  "nextFollowUpAt": "2025-12-27T12:00:00.000Z",
+  "resources": [{ "label": "LinkedIn job post", "href": "PUT_JOB_LINK_HERE" }],
+  "reminders": ["Follow up with recruiter if no response."],
+  "history": [
+    {
+      "title": "Vaga identificada",
+      "subtitle": "Pesquisa ativa / alerta de vagas",
+      "icon": "search",
+      "createdAt": "2025-12-20T10:00:00.000Z"
+    },
+    {
+      "title": "Candidatura enviada",
+      "subtitle": "LinkedIn / Easy Apply",
+      "icon": "send",
+      "createdAt": "2025-12-24T12:00:00.000Z"
+    },
+    {
+      "title": "Candidatura visualizada",
+      "subtitle": "Perfil aberto pelo recrutador",
+      "icon": "eye",
+      "createdAt": "2025-12-25T09:30:00.000Z"
+    },
+    {
+      "title": "Contato inicial",
+      "subtitle": "Mensagem do recrutador",
+      "icon": "message",
+      "createdAt": "2025-12-26T14:00:00.000Z"
+    },
+    {
+      "title": "Entrevista RH",
+      "subtitle": "Fit cultural / alinhamento inicial",
+      "icon": "users",
+      "createdAt": "2025-12-27T15:00:00.000Z"
+    },
+    {
+      "title": "Teste técnico",
+      "subtitle": "Desafio prático / take-home",
+      "icon": "code",
+      "createdAt": "2025-12-29T18:00:00.000Z"
+    },
+    {
+      "title": "Entrevista técnica",
+      "subtitle": "Discussão de solução e stack",
+      "icon": "terminal",
+      "createdAt": "2026-01-03T16:00:00.000Z"
+    },
+    {
+      "title": "Entrevista final",
+      "subtitle": "Gestor / liderança",
+      "icon": "briefcase",
+      "createdAt": "2026-01-05T17:00:00.000Z"
+    },
+    {
+      "title": "Proposta recebida",
+      "subtitle": "Oferta formal enviada",
+      "icon": "file-text",
+      "createdAt": "2026-01-07T11:00:00.000Z"
+    },
+    {
+      "title": "Proposta aceita",
+      "subtitle": "Aceite confirmado",
+      "icon": "check-circle",
+      "createdAt": "2026-01-08T10:00:00.000Z"
+    },
+    {
+      "title": "Processo encerrado",
+      "subtitle": "Contratação concluída",
+      "icon": "flag",
+      "createdAt": "2026-01-10T09:00:00.000Z"
+    }
+  ],
+  "archived": false
+}

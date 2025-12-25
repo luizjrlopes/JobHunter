@@ -2,7 +2,7 @@ import styled, { css } from 'styled-components';
 
 type Variant = 'primary' | 'ghost' | 'icon';
 
-export const StyledButton = styled.button<{ variant: Variant }>`
+export const StyledButton = styled.button<{ $variant: Variant }>`
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -15,8 +15,8 @@ export const StyledButton = styled.button<{ variant: Variant }>`
   transition: all 0.2s ease;
   box-shadow: ${({ theme }) => theme.glass.shadow};
 
-  ${({ variant, theme }) =>
-    variant === 'primary' &&
+  ${({ $variant, theme }) =>
+    $variant === 'primary' &&
     css`
       background: ${theme.gradients.brand};
       color: #fff;
@@ -29,8 +29,8 @@ export const StyledButton = styled.button<{ variant: Variant }>`
       }
     `}
 
-  ${({ variant, theme }) =>
-    variant === 'ghost' &&
+  ${({ $variant, theme }) =>
+    $variant === 'ghost' &&
     css`
       background: rgba(255, 255, 255, 0.6);
       color: ${theme.colors.muted};
@@ -42,8 +42,8 @@ export const StyledButton = styled.button<{ variant: Variant }>`
       }
     `}
 
-  ${({ variant, theme }) =>
-    variant === 'icon' &&
+  ${({ $variant, theme }) =>
+    $variant === 'icon' &&
     css`
       width: 44px;
       height: 44px;

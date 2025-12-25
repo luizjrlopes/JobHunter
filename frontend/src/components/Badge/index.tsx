@@ -8,7 +8,7 @@ interface BadgeProps {
 }
 
 const Badge = ({ status, children }: BadgeProps) => (
-  <BadgeWrapper status={status}>
+  <BadgeWrapper $status={status}>
     <Dot />
     {children}
   </BadgeWrapper>

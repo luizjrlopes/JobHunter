@@ -1,22 +1,44 @@
-import { useMemo, useRef, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import {
   BriefcaseBusiness,
   CheckCircle2,
   Clock3,
-  Download,
   Ghost,
   Plus,
   Search,
   TrendingUp,
-  Upload,
 } from "lucide-react";
 import Button from "../../components/Button";
 import StatCard from "../../components/Card";
 import JobsTable from "../../components/Table";
 import Modal from "../../components/Modal";
+import { Tabs } from "../../components/Tabs";
 import { jobStatuses, jobTracks, useJobs } from "../../hooks/useJobs";
-import type { Job, JobStatus } from "../../types";
+import { IN_PROGRESS_STATUS, OFFER_STATUSES } from "../../constants/jobStatusSets";
+import { useAuth } from "../../hooks/useAuth";
+import type {
+  Job,
+  JobStatus,
+  JobTrack,
+  JobResource,
+  JobTimelineEntry,
+} from "../../types";
 import { formatDate } from "../../utils/formatDate";
+
+// Mapeamento de status em inglês para português
+const statusLabels: Record<JobStatus, string> = {
+  Lead: "Lead (Salva)",
+  Applied: "Aplicada",
+  Viewed: "Visualizada",
+  Contacted: "Contatado",
+  Interview: "Entrevista",
+  TechnicalTest: "Teste Técnico",
+  Offer: "Oferta",
+  Accepted: "Aceita",
+  Rejected: "Rejeitado",
+  Withdrawn: "Retirada",
+  Closed: "Encerrada",
+};
 import {
   Brand,
   BrandIcon,
@@ -46,20 +68,80 @@ import {
 } from "./styles";
 
 export type PeriodFilter = "year" | "month" | "week" | "day";
-type StatCardType = "total" | "process" | "offers" | "ghosted";
+type StatCardType = "total" | "process" | "offers" | "ghosted" | "leads";
+
+type FormState = {
+  // Básico
+  title: string;
+  company: string;
+  track: JobTrack;
+  status: JobStatus;
+  date?: string;
+  location?: string;
+  externalLink?: string;
+
+  // Detalhes da vaga
+  description?: string;
+  responsibilities?: string[];
+  benefits?: string[];
+  additionalInfo?: string;
+  notes?: string[];
+
+  // Contratação
+  employmentType?: "FullTime" | "PartTime" | "Contract" | "Internship" | "Unknown";
+  workModel?: "remote" | "hybrid" | "on-site";
+  seniority?: "Intern" | "Junior" | "Mid" | "Senior" | "Lead" | "Unknown";
+  recruiterName?: string;
+  postedAt?: string;
+
+  // Operação
+  priority?: "P1" | "P2" | "P3";
+  cvVersion?: string;
+  nextFollowUpAt?: string;
+  archived?: boolean;
+
+  resources?: JobResource[];
+  reminders?: string[];
+  history?: JobTimelineEntry[];
+};
 
 const todayIso = new Date().toISOString().split("T")[0];
 
-const defaultFormState = {
+const defaultFormState: FormState = {
+  title: "",
   company: "",
-  position: "",
   track: jobTracks[0],
   status: jobStatuses[0],
   date: todayIso,
   location: "",
   externalLink: "",
-  notes: "",
+  description: "",
+  responsibilities: [],
+  benefits: [],
+  additionalInfo: "",
+  notes: [],
+  employmentType: "Unknown",
+  workModel: "remote",
+  seniority: "Unknown",
+  recruiterName: "",
+  postedAt: "",
+  priority: "P2",
+  cvVersion: "",
+  nextFollowUpAt: "",
+  archived: false,
+  resources: [],
+  reminders: [],
+  history: [],
 };
+
+const trackLabels: Record<JobTrack, string> = {
+  AI: "IA / ML",
+  FULL_STACK: "Full Stack",
+  CLOUD: "Cloud",
+};
+
+const getCompany = (job: Job) => job.company ?? "";
+const getRole = (job: Job) => job.title ?? "";
 
 const Dashboard = () => {
   const {
@@ -71,15 +153,14 @@ const Dashboard = () => {
     deleteJob,
     toggleArchive,
     stats,
-    exportBackup,
-    importBackup,
   } = useJobs();
+  const { logout } = useAuth();
 
-  const [formState, setFormState] = useState(defaultFormState);
+  const [formState, setFormState] = useState<FormState>(defaultFormState);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<StatCardType | null>(null);
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("month");
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeTab, setActiveTab] = useState<string>("basic");
 
   const activeJobs = useMemo(() => jobs.filter((job) => !job.archived), [jobs]);
   const filteredActiveJobs = useMemo(
@@ -99,20 +180,7 @@ const Dashboard = () => {
     setModalType(null);
   };
 
-  const handleDelete = (id: number) => deleteJob(id);
-
-  const handleExportFile = () => exportBackup();
-
-  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      await importBackup(file);
-    } catch (error) {
-      console.error(error);
-      alert("Falha ao importar backup. Verifique o arquivo.");
-    }
-  };
+  const handleDelete = (id: string) => deleteJob(id);
 
   const openModal = (type: StatCardType) => {
     setModalType(type);
@@ -127,8 +195,8 @@ const Dashboard = () => {
 
   const periodOptions = [
     { value: "year", label: "Ano atual" },
-    { value: "month", label: "Mês atual" },
-    { value: "week", label: "Últimos 7 dias" },
+    { value: "month", label: "Mes atual" },
+    { value: "week", label: "Ultimos 7 dias" },
     { value: "day", label: "Hoje" },
   ];
 
@@ -146,34 +214,37 @@ const Dashboard = () => {
   const toLocalDate = (dateStr: string) =>
     dateStr.includes("T") ? new Date(dateStr) : new Date(`${dateStr}T00:00:00`);
 
-  const getFilteredJobsByPeriod = (list: Job[], period: PeriodFilter) => {
+  const getFilteredJobsByPeriod = (
+    list: Job[],
+    period: PeriodFilter,
+    getDate: (job: Job) => Date
+  ) => {
     const start = getPeriodStart(period);
     const now = new Date();
     return list.filter((job) => {
-      const jobDate = toLocalDate(job.date);
+      const jobDate = getDate(job);
       return jobDate >= start && jobDate <= now;
     });
   };
 
-  const hasNoRecentActivity = (job: Job): boolean => {
-    const now = new Date();
-    const fifteenDaysAgo = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
-    if (job.history && job.history.length > 0) {
-      const last = job.history[job.history.length - 1];
-      if (last.createdAt) {
-        return new Date(last.createdAt) < fifteenDaysAgo;
-      }
-    }
-    return toLocalDate(job.date) < fifteenDaysAgo;
+  const getOfferEventDate = (job: Job): Date => {
+    const keywords = [/proposta/i, /oferta/i, /offer/i, /aceit/i, /accepted/i];
+    const offerEntry = (job.history ?? []).slice().reverse().find((e) => {
+      const t = e.title ?? "";
+      return keywords.some((k) => k.test(t));
+    });
+    if (offerEntry?.createdAt) return toLocalDate(offerEntry.createdAt);
+    if (job.updatedAt) return toLocalDate(job.updatedAt);
+    return toLocalDate(job.date);
   };
 
   const ghostedJobs = useMemo(() => {
+    const now = new Date();
     return activeJobs.filter((job) => {
-      if (job.status === "Ghosted") return true;
-      if (job.status === "Aplicada" || job.status === "Entrevista") {
-        return hasNoRecentActivity(job);
-      }
-      return false;
+      if (!IN_PROGRESS_STATUS.includes(job.status)) return false;
+      if (!job.nextFollowUpAt) return false;
+      const next = toLocalDate(job.nextFollowUpAt);
+      return next < now;
     });
   }, [activeJobs]);
 
@@ -184,24 +255,33 @@ const Dashboard = () => {
       return ghostedJobs;
     }
 
-    let pool: Job[] = [];
-    if (modalType === "total") {
-      pool = jobs; // inclui arquivadas
-    } else if (modalType === "process") {
-      pool = activeJobs.filter(
-        (job) => job.status === "Aplicada" || job.status === "Entrevista"
-      );
-    } else if (modalType === "offers") {
-      pool = activeJobs.filter((job) => job.status === "Oferta");
+    if (modalType === "process") {
+      // Estado atual: sem filtro por período
+      return activeJobs.filter((job) => IN_PROGRESS_STATUS.includes(job.status));
     }
 
-    return getFilteredJobsByPeriod(pool, periodFilter);
+    if (modalType === "total") {
+      const pool = jobs.filter((job) => job.status !== "Lead");
+      return getFilteredJobsByPeriod(pool, periodFilter, (job) => toLocalDate(job.date));
+    }
+
+    if (modalType === "offers") {
+      const pool = activeJobs.filter((job) => OFFER_STATUSES.includes(job.status));
+      return getFilteredJobsByPeriod(pool, periodFilter, getOfferEventDate);
+    }
+
+    if (modalType === "leads") {
+      const pool = jobs.filter((job) => job.status === "Lead");
+      return getFilteredJobsByPeriod(pool, periodFilter, (job) => toLocalDate(job.date));
+    }
+
+    return [];
   }, [activeJobs, ghostedJobs, modalType, periodFilter]);
 
   const statChips = useMemo(
     () => [
       {
-        label: "Aplicações no mês",
+        label: "Aplicacoes no mes",
         value: stats.total,
         hint: "Meta: 10/semana",
         icon: BriefcaseBusiness,
@@ -211,7 +291,7 @@ const Dashboard = () => {
       {
         label: "Em processo",
         value: stats.process,
-        hint: "Aplicada + Entrevista",
+        hint: "Ativas",
         icon: Clock3,
         tone: "amber" as const,
         type: "process" as StatCardType,
@@ -219,7 +299,7 @@ const Dashboard = () => {
       {
         label: "Ofertas",
         value: stats.offers,
-        hint: "Recebidas no mês",
+        hint: "Recebidas no mes",
         icon: CheckCircle2,
         tone: "green" as const,
         type: "offers" as StatCardType,
@@ -227,19 +307,25 @@ const Dashboard = () => {
       {
         label: "Sem resposta",
         value: stats.ghosted,
-        hint: "15+ dias sem retorno",
+        hint: "Follow-up vencido",
         icon: Ghost,
         tone: "gray" as const,
         type: "ghosted" as StatCardType,
+      },
+      {
+        label: "Leads do mes",
+        value: stats.leads,
+        hint: "Vagas salvas",
+        icon: Search,
+        tone: "indigo" as const,
+        type: "leads" as StatCardType,
       },
     ],
     [stats]
   );
 
-  const updateTrack = (track: Job["track"] | "Todas") =>
-    updateFilters({ track });
-  const updateStatus = (status: JobStatus | "Todas") =>
-    updateFilters({ status });
+  const updateTrack = (track: JobTrack | "Todas") => updateFilters({ track });
+  const updateStatus = (status: JobStatus | "Todas") => updateFilters({ status });
 
   return (
     <Page>
@@ -256,22 +342,9 @@ const Dashboard = () => {
           </Brand>
 
           <HeaderActions>
-            <Button variant="ghost" onClick={handleExportFile}>
-              <Download size={18} /> Exportar
+            <Button variant="ghost" onClick={logout}>
+              Sair
             </Button>
-            <Button
-              variant="ghost"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload size={18} /> Importar
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              onChange={handleImportFile}
-              style={{ display: "none" }}
-            />
             <Button onClick={() => setIsModalOpen(true)}>
               <Plus size={18} /> Nova Vaga
             </Button>
@@ -312,7 +385,7 @@ const Dashboard = () => {
                 <option value="Todas">Todas as Trilhas</option>
                 {jobTracks.map((track) => (
                   <option key={track} value={track}>
-                    {track}
+                    {trackLabels[track]}
                   </option>
                 ))}
               </Select>
@@ -324,7 +397,7 @@ const Dashboard = () => {
                 <option value="Todas">Todos Status</option>
                 {jobStatuses.map((status) => (
                   <option key={status} value={status}>
-                    {status}
+                    {statusLabels[status]}
                   </option>
                 ))}
               </Select>
@@ -336,6 +409,7 @@ const Dashboard = () => {
           jobs={filteredActiveJobs}
           onDelete={handleDelete}
           onToggleArchive={toggleArchive}
+          trackLabels={trackLabels}
         />
 
         {filteredArchivedJobs.length > 0 && (
@@ -345,6 +419,7 @@ const Dashboard = () => {
               jobs={filteredArchivedJobs}
               onDelete={handleDelete}
               onToggleArchive={toggleArchive}
+              trackLabels={trackLabels}
             />
           </Panel>
         )}
@@ -354,13 +429,15 @@ const Dashboard = () => {
         open={isModalOpen}
         title={
           modalType === "total"
-            ? "Aplicações do período"
+            ? "Aplicacoes do periodo"
             : modalType === "process"
             ? "Candidaturas em processo"
             : modalType === "offers"
             ? "Candidaturas com oferta"
             : modalType === "ghosted"
-            ? "Sem resposta (+15 dias)"
+            ? "Sem resposta (follow-up vencido)"
+            : modalType === "leads"
+            ? "Leads do periodo"
             : "Nova Vaga"
         }
         onClose={closeModal}
@@ -405,7 +482,7 @@ const Dashboard = () => {
             )}
             {modalJobs.length === 0 ? (
               <p style={{ margin: 0, color: "#6b7280" }}>
-                Nenhuma candidatura encontrada para este período.
+                Nenhuma candidatura encontrada para este periodo.
               </p>
             ) : (
               <ul
@@ -438,8 +515,8 @@ const Dashboard = () => {
                         gap: 4,
                       }}
                     >
-                      <strong>{job.position}</strong>
-                      <span style={{ color: "#6b7280" }}>{job.company}</span>
+                      <strong>{getRole(job)}</strong>
+                      <span style={{ color: "#6b7280" }}>{getCompany(job)}</span>
                     </div>
                     <div
                       style={{
@@ -461,128 +538,384 @@ const Dashboard = () => {
           </div>
         ) : (
           <form id="job-form" onSubmit={handleSubmit}>
-            <FormGrid>
-              <Field>
-                <Label>Nome da Empresa *</Label>
-                <Input
-                  required
-                  value={formState.company}
-                  onChange={(e) =>
-                    setFormState((prev) => ({
-                      ...prev,
-                      company: e.target.value,
-                    }))
-                  }
-                  placeholder="Ex: Google, Nubank..."
-                />
-              </Field>
+            <div style={{ maxHeight: "600px", overflow: "auto", paddingRight: "8px" }}>
+              <Tabs
+                tabs={[
+                  {
+                    id: "basic",
+                    label: "Básico",
+                    content: (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                        <Field>
+                          <Label>Nome da Empresa *</Label>
+                          <Input
+                            required
+                            value={formState.company}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                company: e.target.value,
+                              }))
+                            }
+                            placeholder="Ex: Google, Nubank..."
+                          />
+                        </Field>
 
-              <Field>
-                <Label>Cargo *</Label>
-                <Input
-                  required
-                  value={formState.position}
-                  onChange={(e) =>
-                    setFormState((prev) => ({
-                      ...prev,
-                      position: e.target.value,
-                    }))
-                  }
-                  placeholder="Ex: UX Designer"
-                />
-              </Field>
+                        <Field>
+                          <Label>Cargo *</Label>
+                          <Input
+                            required
+                            value={formState.title}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                title: e.target.value,
+                              }))
+                            }
+                            placeholder="Ex: UX Designer"
+                          />
+                        </Field>
 
-              <Field>
-                <Label>Trilha *</Label>
-                <Select
-                  value={formState.track}
-                  onChange={(e) =>
-                    setFormState((prev) => ({
-                      ...prev,
-                      track: e.target.value as any,
-                    }))
-                  }
-                >
-                  {jobTracks.map((track) => (
-                    <option key={track} value={track}>
-                      {track}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+                        <Field>
+                          <Label>Trilha *</Label>
+                          <Select
+                            value={formState.track}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                track: e.target.value as JobTrack,
+                              }))
+                            }
+                          >
+                            {jobTracks.map((track) => (
+                              <option key={track} value={track}>
+                                {trackLabels[track]}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
 
-              <Field>
-                <Label>Status Inicial *</Label>
-                <Select
-                  value={formState.status}
-                  onChange={(e) =>
-                    setFormState((prev) => ({
-                      ...prev,
-                      status: e.target.value as any,
-                    }))
-                  }
-                >
-                  {jobStatuses.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+                        <Field>
+                          <Label>Status Inicial *</Label>
+                          <Select
+                            value={formState.status}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                status: e.target.value as JobStatus,
+                              }))
+                            }
+                          >
+                            {jobStatuses.map((status) => (
+                              <option key={status} value={status}>
+                                {statusLabels[status]}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
 
-              <Field>
-                <Label>Data de Aplicação *</Label>
-                <Input
-                  type="date"
-                  required
-                  value={formState.date}
-                  onChange={(e) =>
-                    setFormState((prev) => ({ ...prev, date: e.target.value }))
-                  }
-                />
-              </Field>
+                        <Field>
+                          <Label>Data de Aplicacao *</Label>
+                          <Input
+                            type="date"
+                            required
+                            value={formState.date}
+                            onChange={(e) =>
+                              setFormState((prev) => ({ ...prev, date: e.target.value }))
+                            }
+                          />
+                        </Field>
 
-              <Field>
-                <Label>Localização</Label>
-                <Input
-                  value={formState.location}
-                  onChange={(e) =>
-                    setFormState((prev) => ({
-                      ...prev,
-                      location: e.target.value,
-                    }))
-                  }
-                  placeholder="Ex: Remoto, São Paulo, Híbrido..."
-                />
-              </Field>
+                        <Field>
+                          <Label>Localizacao</Label>
+                          <Input
+                            value={formState.location}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                location: e.target.value,
+                              }))
+                            }
+                            placeholder="Ex: Remoto, Sao Paulo..."
+                          />
+                        </Field>
 
-              <Field style={{ gridColumn: "1 / -1" }}>
-                <Label>Link Externo</Label>
-                <Input
-                  type="url"
-                  value={formState.externalLink}
-                  onChange={(e) =>
-                    setFormState((prev) => ({
-                      ...prev,
-                      externalLink: e.target.value,
-                    }))
-                  }
-                  placeholder="https://..."
-                />
-              </Field>
+                        <Field style={{ gridColumn: "1 / -1" }}>
+                          <Label>Link Externo</Label>
+                          <Input
+                            type="url"
+                            value={formState.externalLink}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                externalLink: e.target.value,
+                              }))
+                            }
+                            placeholder="https://..."
+                          />
+                        </Field>
+                      </div>
+                    ),
+                  },
+                  {
+                    id: "details",
+                    label: "Detalhes",
+                    content: (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                        <Field>
+                          <Label>Descrição da Vaga</Label>
+                          <TextArea
+                            value={formState.description}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                description: e.target.value,
+                              }))
+                            }
+                            placeholder="Resumo geral sobre a vaga..."
+                            rows={3}
+                          />
+                        </Field>
 
-              <Field style={{ gridColumn: "1 / -1" }}>
-                <Label>Anotações Iniciais</Label>
-                <TextArea
-                  value={formState.notes}
-                  onChange={(e) =>
-                    setFormState((prev) => ({ ...prev, notes: e.target.value }))
-                  }
-                  placeholder="Adicione observações sobre a vaga, requisitos, contato do recrutador, etc..."
-                  rows={4}
-                />
-              </Field>
-            </FormGrid>
+                        <Field>
+                          <Label>Responsabilidades (uma por linha)</Label>
+                          <TextArea
+                            value={formState.responsibilities.join("\n")}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                responsibilities: e.target.value
+                                  .split("\n")
+                                  .map((s) => s.trim())
+                                  .filter(Boolean),
+                              }))
+                            }
+                            placeholder="Ex: Desenvolver features&#10;Revisar PRs&#10;Mentorear junior"
+                            rows={4}
+                          />
+                        </Field>
+
+                        <Field>
+                          <Label>Benefícios (um por linha)</Label>
+                          <TextArea
+                            value={formState.benefits.join("\n")}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                benefits: e.target.value
+                                  .split("\n")
+                                  .map((s) => s.trim())
+                                  .filter(Boolean),
+                              }))
+                            }
+                            placeholder="Ex: Vale refeição&#10;Gympass&#10;Desenvolvimento contínuo"
+                            rows={3}
+                          />
+                        </Field>
+
+                        <Field>
+                          <Label>Informações Adicionais</Label>
+                          <TextArea
+                            value={formState.additionalInfo}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                additionalInfo: e.target.value,
+                              }))
+                            }
+                            placeholder="Outros detalhes relevantes sobre a vaga..."
+                            rows={3}
+                          />
+                        </Field>
+
+                        <Field>
+                          <Label>Notas internas (uma por linha)</Label>
+                          <TextArea
+                            value={(formState.notes ?? []).join("\n")}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                notes: e.target.value
+                                  .split("\n")
+                                  .map((s) => s.trim())
+                                  .filter(Boolean),
+                              }))
+                            }
+                            placeholder="Ex: Falei com o recrutador na segunda\nEmpresa prefere presencial às quartas"
+                            rows={3}
+                          />
+                        </Field>
+                      </div>
+                    ),
+                  },
+                  {
+                    id: "hiring",
+                    label: "Contratação",
+                    content: (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                        <Field>
+                          <Label>Modelo de Trabalho</Label>
+                          <Select
+                            value={formState.workModel}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                workModel: e.target.value as FormState["workModel"],
+                              }))
+                            }
+                          >
+                            {(["remote", "hybrid", "on-site", "unknown"] as const).map((wm) => (
+                              <option key={wm} value={wm}>
+                                {wm.charAt(0).toUpperCase() + wm.slice(1)}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+
+                        <Field>
+                          <Label>Tipo de Contratacao</Label>
+                          <Select
+                            value={formState.employmentType}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                employmentType: e.target.value as FormState["employmentType"],
+                              }))
+                            }
+                          >
+                            {(
+                              [
+                                "FullTime",
+                                "PartTime",
+                                "Contract",
+                                "Internship",
+                                "Unknown",
+                              ] as const
+                            ).map((et) => (
+                              <option key={et} value={et}>
+                                {et}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+
+                        <Field>
+                          <Label>Senioridade</Label>
+                          <Select
+                            value={formState.seniority}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                seniority: e.target.value as FormState["seniority"],
+                              }))
+                            }
+                          >
+                            {(["Intern", "Junior", "Mid", "Senior", "Lead", "Unknown"] as const).map(
+                              (s) => (
+                                <option key={s} value={s}>
+                                  {s}
+                                </option>
+                              )
+                            )}
+                          </Select>
+                        </Field>
+
+                        <Field style={{ gridColumn: "1 / -1" }}>
+                          <Label>Recrutador(a)</Label>
+                          <Input
+                            value={formState.recruiterName}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                recruiterName: e.target.value,
+                              }))
+                            }
+                            placeholder="Nome do contato do recrutador"
+                          />
+                        </Field>
+
+                        <Field style={{ gridColumn: "1 / -1" }}>
+                          <Label>Data de Postagem</Label>
+                          <Input
+                            type="datetime-local"
+                            value={formState.postedAt}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                postedAt: e.target.value,
+                              }))
+                            }
+                          />
+                        </Field>
+                      </div>
+                    ),
+                  },
+                  {
+                    id: "operations",
+                    label: "Operação",
+                    content: (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                        <Field>
+                          <Label>Prioridade</Label>
+                          <Select
+                            value={formState.priority}
+                            onChange={(e) =>
+                              setFormState((prev) => ({
+                                ...prev,
+                                priority: e.target.value as FormState["priority"],
+                              }))
+                            }
+                          >
+                            {["P1", "P2", "P3"].map((p) => (
+                              <option key={p} value={p}>
+                                {p}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+
+                        <Field>
+                          <Label>Versao do CV</Label>
+                          <Input
+                            value={formState.cvVersion}
+                            onChange={(e) =>
+                              setFormState((prev) => ({ ...prev, cvVersion: e.target.value }))
+                            }
+                            placeholder="Ex: CV_AI_v3"
+                          />
+                        </Field>
+
+                        <Field>
+                          <Label>
+                            <input
+                              type="checkbox"
+                              checked={!!formState.archived}
+                              onChange={(e) =>
+                                setFormState((prev) => ({ ...prev, archived: e.target.checked }))
+                              }
+                            />
+                            {" Arquivar ao criar?"}
+                          </Label>
+                        </Field>
+
+                        <Field>
+                          <Label>Proximo follow-up</Label>
+                          <Input
+                            type="datetime-local"
+                            value={formState.nextFollowUpAt}
+                            onChange={(e) =>
+                              setFormState((prev) => ({ ...prev, nextFollowUpAt: e.target.value }))
+                            }
+                          />
+                        </Field>
+                      </div>
+                    ),
+                  },
+                ]}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+              />
+            </div>
           </form>
         )}
       </Modal>
@@ -591,3 +924,5 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
+

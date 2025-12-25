@@ -1,4 +1,4 @@
-import {
+﻿import {
   createContext,
   useEffect,
   useMemo,
@@ -14,313 +14,231 @@ import {
   JobTrack,
 } from "../types";
 import {
-  getAllJobs,
-  updateJobInDB,
-  addJobToDB,
-  deleteJobFromDB,
-  bulkReplaceJobs,
-} from "../utils/db";
-import {
-  autoBackupJobs,
-  exportJobsToJSON,
-  importJobsFromJSON,
-} from "../utils/backup";
+  IN_PROGRESS_STATUS,
+  OFFER_STATUSES,
+  CONCLUDING_STATUSES,
+  LEAD_STATUS,
+} from "../constants/jobStatusSets";
+import { fetchJobs, createJob, patchJob, removeJob } from "../services/api";
+import { useAuth } from "../hooks/useAuth";
+
+interface AddJobPayload {
+  // Campos principais
+  title: string;
+  company: string;
+  track: JobTrack;
+  status: JobStatus;
+  date?: string;
+  location?: string;
+  externalLink?: string;
+  priority?: "P1" | "P2" | "P3";
+  cvVersion?: string;
+  nextFollowUpAt?: string;
+  archived?: boolean;
+
+  // Detalhes da vaga
+  employmentType?: "FullTime" | "PartTime" | "Contract" | "Internship" | "Unknown";
+  workModel?: "remote" | "hybrid" | "on-site";
+  seniority?: "Intern" | "Junior" | "Mid" | "Senior" | "Lead" | "Unknown";
+  recruiterName?: string;
+  description?: string;
+  responsibilities?: string[];
+  benefits?: string[];
+  additionalInfo?: string;
+  notes?: string[];
+  postedAt?: string;
+
+  resources?: JobResource[];
+  reminders?: string[];
+  history?: JobTimelineEntry[];
+}
 
 interface JobContextValue {
   jobs: Job[];
+  isLoading: boolean;
   filteredJobs: Job[];
   filters: JobFilters;
   setFilters: (filters: JobFilters) => void;
   updateFilters: (partial: Partial<JobFilters>) => void;
-  addJob: (payload: Omit<Job, "id" | "date"> & { date?: string }) => void;
-  deleteJob: (id: number) => void;
-  updateJob: (id: number, partial: Partial<Job>) => void;
-  addHistoryEntry: (id: number, entry: JobTimelineEntry) => void;
-  addResource: (id: number, resource: JobResource) => void;
-  removeResource: (id: number, index: number) => void;
-  addReminder: (id: number, text: string) => void;
-  removeReminder: (id: number, index: number) => void;
-  toggleArchive: (id: number) => void;
-  exportBackup: () => void;
-  importBackup: (file: File) => Promise<void>;
+  addJob: (payload: AddJobPayload) => void;
+  deleteJob: (id: string) => void;
+  updateJob: (id: string, partial: Partial<Job>) => void;
+  addHistoryEntry: (id: string, entry: JobTimelineEntry) => void;
+  addResource: (id: string, resource: JobResource) => void;
+  removeResource: (id: string, index: number) => void;
+  addReminder: (id: string, text: string) => void;
+  removeReminder: (id: string, index: number) => void;
+  toggleArchive: (id: string) => void;
   stats: {
     total: number;
     process: number;
     offers: number;
     ghosted: number;
+    leads: number;
   };
 }
 
-// Função para gerar dados iniciais com datas dinâmicas
-const getInitialJobs = (): Job[] => {
-  const now = new Date();
-  const today = now.toISOString().split("T")[0];
-  const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split("T")[0];
-  const twentyDaysAgo = new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split("T")[0];
-  const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split("T")[0];
-  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split("T")[0];
-
-  return [
-    {
-      id: 1,
-      company: "TechFlow",
-      position: "Senior Frontend Dev",
-      track: "Frontend",
-      status: "Entrevista",
-      date: twoDaysAgo,
-      externalLink: "#",
-      notes:
-        "A empresa utiliza uma stack moderna com Next.js 14 e Tailwind CSS. Na primeira conversa com o RH, mencionaram que o foco da vaga é performance e acessibilidade. Próximo passo é o live coding com o Tech Lead. Disseram que valorizam muito testes unitários com Vitest.",
-      resources: [
-        { label: "Meu Currículo (v2)", href: "#" },
-        { label: "TechFlow - site", href: "#" },
-      ],
-      reminders: [
-        "Revisar SSR e Server Components",
-        "Focar em otimização de imagem",
-      ],
-      history: [
-        {
-          title: "Aplicação enviada",
-          subtitle: new Date(
-            now.getTime() - 2 * 24 * 60 * 60 * 1000
-          ).toLocaleDateString("pt-BR"),
-          icon: "check",
-          createdAt: new Date(
-            now.getTime() - 2 * 24 * 60 * 60 * 1000
-          ).toISOString(),
-        },
-        {
-          title: "Status atual",
-          subtitle: "Entrevista",
-          icon: "clock",
-          createdAt: now.toISOString(),
-        },
-      ],
-      archived: false,
-    },
-    {
-      id: 2,
-      company: "DataSphere",
-      position: "AI Researcher",
-      track: "Dados",
-      status: "Aplicada",
-      date: twentyDaysAgo,
-    },
-    {
-      id: 3,
-      company: "CloudWorks",
-      position: "DevOps Engineer",
-      track: "Backend",
-      status: "Recusada",
-      date: sixtyDaysAgo,
-    },
-    {
-      id: 4,
-      company: "Creative Minds",
-      position: "Product Designer",
-      track: "Design",
-      status: "Oferta",
-      date: sixtyDaysAgo,
-    },
-    {
-      id: 5,
-      company: "NextGen Bank",
-      position: "Java Developer",
-      track: "Backend",
-      status: "Ghosted",
-      date: ninetyDaysAgo,
-    },
-  ];
-};
-
-const initialJobs: Job[] = getInitialJobs();
-
 export const JobContext = createContext<JobContextValue | null>(null);
 
+const defaultFilters: JobFilters = {
+  search: "",
+  track: "Todas",
+  status: "Todas",
+};
+
+const getCompany = (job: Job) => job.company ?? "";
+const getRole = (job: Job) => job.title ?? "";
+
 export const JobProvider = ({ children }: { children: ReactNode }) => {
-  // Carregar jobs do IndexedDB
+  const { token } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [filters, setFiltersState] = useState<JobFilters>({
-    search: "",
-    track: "Todas",
-    status: "Todas",
-  });
+  const [filters, setFiltersState] = useState<JobFilters>(defaultFilters);
 
-  // Carregar jobs do IndexedDB ao montar
   useEffect(() => {
     const loadJobs = async () => {
+      if (!token) {
+        setJobs([]);
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(true);
       try {
-        const storedJobs = await getAllJobs();
-        if (storedJobs.length === 0) {
-          // Se não houver dados, gerar jobs iniciais com datas atualizadas
-          const freshInitialJobs = getInitialJobs();
-          await bulkReplaceJobs(freshInitialJobs);
-          setJobs(freshInitialJobs);
-        } else {
-          setJobs(storedJobs);
-        }
+        const remoteJobs = await fetchJobs();
+        setJobs(remoteJobs);
       } catch (error) {
         console.error("Erro ao carregar jobs:", error);
-        const freshInitialJobs = getInitialJobs();
-        setJobs(freshInitialJobs);
+        setJobs([]);
       } finally {
         setIsLoading(false);
       }
     };
     loadJobs();
-  }, []);
+  }, [token]);
 
   const setFilters = (next: JobFilters) => setFiltersState(next);
   const updateFilters = (partial: Partial<JobFilters>) =>
     setFiltersState((prev) => ({ ...prev, ...partial }));
 
-  const addJob = async (
-    payload: Omit<Job, "id" | "date"> & { date?: string }
-  ) => {
+  const addJob = async (payload: AddJobPayload) => {
+    if (!token) return;
     const now = new Date();
-    const nextJob: Job = {
-      ...payload,
-      id: Date.now(),
+    const nextJob = {
+      title: payload.title,
+      company: payload.company,
+      track: payload.track,
+      status: payload.status,
       date: payload.date ?? now.toISOString().split("T")[0],
-    };
+      location: payload.location,
+      externalLink: payload.externalLink,
+      priority: payload.priority ?? "P2",
+      cvVersion: payload.cvVersion,
+      nextFollowUpAt: payload.nextFollowUpAt,
+      archived: payload.archived ?? false,
+      employmentType: payload.employmentType,
+      workModel: payload.workModel,
+      seniority: payload.seniority,
+      recruiterName: payload.recruiterName,
+      description: payload.description,
+      responsibilities: payload.responsibilities ?? [],
+      benefits: payload.benefits ?? [],
+      additionalInfo: payload.additionalInfo,
+      notes: payload.notes ?? [],
+      postedAt: payload.postedAt,
+      resources: payload.resources ?? [],
+      reminders: payload.reminders ?? [],
+      history:
+        (payload.history && payload.history.length > 0)
+          ? payload.history
+          : [
+              {
+                title: "Aplicacao enviada",
+                subtitle: payload.date ?? now.toISOString().split("T")[0],
+                icon: "check" as const,
+                createdAt: now.toISOString(),
+              },
+            ],
+    } as Omit<Job, "id" | "ownerId" | "createdAt" | "updatedAt">;
+
     try {
-      await addJobToDB(nextJob);
-      setJobs((prev) => [nextJob, ...prev]);
-      autoBackupJobs([nextJob, ...jobs]);
+      const saved = await createJob(nextJob);
+      setJobs((prev) => [saved, ...prev]);
     } catch (error) {
       console.error("Erro ao adicionar job:", error);
     }
   };
 
-  const updateJob = async (id: number, partial: Partial<Job>) => {
+  const updateJob = async (id: string, partial: Partial<Job>) => {
+    if (!token) return;
     try {
-      await updateJobInDB(id, partial);
-      setJobs((prev) => {
-        const updated = prev.map((job) =>
-          job.id === id ? { ...job, ...partial } : job
-        );
-        autoBackupJobs(updated);
-        return updated;
-      });
+      const updatedJob = await patchJob(id, partial);
+      setJobs((prev) => prev.map((job) => (job.id === id ? updatedJob : job)));
     } catch (error) {
       console.error("Erro ao atualizar job:", error);
     }
   };
 
-  const addHistoryEntry = async (id: number, entry: JobTimelineEntry) => {
+  const addHistoryEntry = async (id: string, entry: JobTimelineEntry) => {
     const job = jobs.find((j) => j.id === id);
     if (!job) return;
     const newHistory = [...(job.history ?? []), entry];
     await updateJob(id, { history: newHistory });
   };
 
-  const addResource = async (id: number, resource: JobResource) => {
+  const addResource = async (id: string, resource: JobResource) => {
     const job = jobs.find((j) => j.id === id);
     if (!job) return;
     const newResources = [...(job.resources ?? []), resource];
     await updateJob(id, { resources: newResources });
   };
 
-  const removeResource = async (id: number, index: number) => {
+  const removeResource = async (id: string, index: number) => {
     const job = jobs.find((j) => j.id === id);
     if (!job) return;
     const newResources = (job.resources ?? []).filter((_, i) => i !== index);
     await updateJob(id, { resources: newResources });
   };
 
-  const addReminder = async (id: number, text: string) => {
+  const addReminder = async (id: string, text: string) => {
     const job = jobs.find((j) => j.id === id);
     if (!job) return;
     const newReminders = [...(job.reminders ?? []), text];
     await updateJob(id, { reminders: newReminders });
   };
 
-  const removeReminder = async (id: number, index: number) => {
+  const removeReminder = async (id: string, index: number) => {
     const job = jobs.find((j) => j.id === id);
     if (!job) return;
     const newReminders = (job.reminders ?? []).filter((_, i) => i !== index);
     await updateJob(id, { reminders: newReminders });
   };
 
-  const toggleArchive = async (id: number) => {
+  const toggleArchive = async (id: string) => {
     const job = jobs.find((j) => j.id === id);
     if (!job) return;
     const archiving = !job.archived;
 
-    const mapOnArchive: Record<JobStatus, JobStatus> = {
-      Aplicada: "Desistencia",
-      Entrevista: "Eliminado",
-      Oferta: "Recusada",
-      Recusada: "Recusada",
-      Ghosted: "Ghosted",
-      Eliminado: "Eliminado",
-      Desistencia: "Desistencia",
-    };
-    const mapOnUnarchive: Record<JobStatus, JobStatus> = {
-      Desistencia: "Aplicada",
-      Eliminado: "Entrevista",
-      Recusada: "Oferta",
-      Aplicada: "Aplicada",
-      Entrevista: "Entrevista",
-      Oferta: "Oferta",
-      Ghosted: "Ghosted",
-    };
-
-    const nextStatus = archiving
-      ? mapOnArchive[job.status as JobStatus] ?? job.status
-      : mapOnUnarchive[job.status as JobStatus] ?? job.status;
-
     const now = new Date().toISOString();
     const entry = {
       title: archiving ? "Candidatura arquivada" : "Candidatura desarquivada",
-      subtitle: `Status alterado para ${nextStatus}`,
+      subtitle: `Status: ${job.status}`,
       icon: "activity" as const,
       createdAt: now,
     };
 
     await updateJob(id, {
       archived: archiving,
-      status: nextStatus,
       history: [...(job.history ?? []), entry],
     });
   };
 
-  const deleteJob = async (id: number) => {
+  const deleteJob = async (id: string) => {
+    if (!token) return;
     try {
-      await deleteJobFromDB(id);
-      setJobs((prev) => {
-        const updated = prev.filter((job) => job.id !== id);
-        autoBackupJobs(updated);
-        return updated;
-      });
+      await removeJob(id);
+      setJobs((prev) => prev.filter((job) => job.id !== id));
     } catch (error) {
       console.error("Erro ao deletar job:", error);
-    }
-  };
-
-  const exportBackup = () => {
-    exportJobsToJSON(jobs);
-  };
-
-  const importBackup = async (file: File) => {
-    try {
-      const importedJobs = await importJobsFromJSON(file);
-      await bulkReplaceJobs(importedJobs);
-      setJobs(importedJobs);
-      autoBackupJobs(importedJobs);
-    } catch (error) {
-      console.error("Erro ao importar backup:", error);
-      throw error;
     }
   };
 
@@ -328,13 +246,11 @@ export const JobProvider = ({ children }: { children: ReactNode }) => {
     const searchTerm = filters.search.toLowerCase();
 
     return jobs.filter((job) => {
-      const matchesSearch =
-        job.company.toLowerCase().includes(searchTerm) ||
-        job.position.toLowerCase().includes(searchTerm);
-      const matchesTrack =
-        filters.track === "Todas" || job.track === filters.track;
-      const matchesStatus =
-        filters.status === "Todas" || job.status === filters.status;
+      const company = getCompany(job).toLowerCase();
+      const role = getRole(job).toLowerCase();
+      const matchesSearch = company.includes(searchTerm) || role.includes(searchTerm);
+      const matchesTrack = filters.track === "Todas" || job.track === filters.track;
+      const matchesStatus = filters.status === "Todas" || job.status === filters.status;
 
       return matchesSearch && matchesTrack && matchesStatus;
     });
@@ -346,59 +262,60 @@ export const JobProvider = ({ children }: { children: ReactNode }) => {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const fifteenDaysAgo = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
 
-    const toLocalDate = (dateStr: string) =>
-      dateStr.includes("T")
-        ? new Date(dateStr)
-        : new Date(`${dateStr}T00:00:00`);
+    const PROCESS_STATUSES = IN_PROGRESS_STATUS;
+    const isConcludingStatus = (s: JobStatus) => CONCLUDING_STATUSES.includes(s);
 
-    const isInCurrentMonth = (jobDate: string) => {
-      const d = toLocalDate(jobDate);
+    const toLocalDate = (dateStr: string) =>
+      dateStr.includes("T") ? new Date(dateStr) : new Date(`${dateStr}T00:00:00`);
+
+    const isInCurrentMonth = (dateStr: string) => {
+      const d = toLocalDate(dateStr);
       return d >= startOfMonth && d <= now;
     };
 
-    const hasNoRecentActivity = (job: Job): boolean => {
-      // Se tiver histórico, usa a última atividade
-      if (job.history && job.history.length > 0) {
-        const lastEvent = job.history[job.history.length - 1];
-        if (lastEvent.createdAt) {
-          const lastEventDate = new Date(lastEvent.createdAt);
-          return lastEventDate < fifteenDaysAgo;
-        }
-      }
-      // fallback: data de aplicação
-      const applicationDate = toLocalDate(job.date);
-      return applicationDate < fifteenDaysAgo;
+    const getOfferEventDate = (job: Job): Date | null => {
+      // Procura um evento de proposta/aceite no histórico; fallback para updatedAt
+      const keywords = [/proposta/i, /oferta/i, /offer/i, /aceit/i, /accepted/i];
+      const offerEntry = (job.history ?? []).slice().reverse().find((e) => {
+        const t = e.title ?? "";
+        return keywords.some((k) => k.test(t));
+      });
+      if (offerEntry?.createdAt) return toLocalDate(offerEntry.createdAt);
+      if (job.updatedAt) return toLocalDate(job.updatedAt);
+      return null;
     };
 
     return {
-      // Total de candidaturas no mês (independente de status e arquivamento)
-      total: jobs.filter((job) => isInCurrentMonth(job.date)).length,
+      // Total: candidaturas enviadas no mês atual (todos os status exceto Lead)
+      total: jobs.filter((job) => job.status !== LEAD_STATUS && isInCurrentMonth(job.date)).length,
 
-      // Em Processo = Aplicada ou Entrevista (no mês) e não arquivadas
-      process: activeJobs.filter(
-        (job) =>
-          (job.status === "Aplicada" || job.status === "Entrevista") &&
-          isInCurrentMonth(job.date)
-      ).length,
+      // Em processo: statuses ativos (sem filtro por mês)
+      process: activeJobs.filter((job) => PROCESS_STATUSES.includes(job.status)).length,
 
-      // Ofertas recebidas no mês (não arquivadas)
-      offers: activeJobs.filter(
-        (job) => job.status === "Oferta" && isInCurrentMonth(job.date)
-      ).length,
-
-      // Sem Resposta = Ghosted OU (Aplicada/Entrevista sem atividade há 15 dias) — somente ativas
-      ghosted: activeJobs.filter((job) => {
-        if (job.status === "Ghosted") return true;
-        if (job.status === "Aplicada" || job.status === "Entrevista") {
-          return hasNoRecentActivity(job);
-        }
-        return false;
+      // Ofertas/aceites: usar data do evento no histórico (ou updatedAt) para validar mês atual
+      offers: activeJobs.filter((job) => {
+        if (!OFFER_STATUSES.includes(job.status)) return false;
+        const d = getOfferEventDate(job);
+        return !!d && d >= startOfMonth && d <= now;
       }).length,
+
+      // Sem resposta: candidaturas ativas com follow-up vencido (nextFollowUpAt passado). Exclui concluídas
+      ghosted: activeJobs.filter((job) => {
+        if (!PROCESS_STATUSES.includes(job.status)) return false;
+        if (isConcludingStatus(job.status)) return false;
+        if (!job.nextFollowUpAt) return false;
+        const next = toLocalDate(job.nextFollowUpAt);
+        return next < now;
+      }).length,
+
+      // Leads do mês: vagas salvas ainda não aplicadas, filtradas por date
+      leads: jobs.filter((job) => job.status === LEAD_STATUS && isInCurrentMonth(job.date)).length,
     };
   }, [jobs]);
 
   const value: JobContextValue = {
     jobs,
+    isLoading,
     filteredJobs,
     filters,
     setFilters,
@@ -412,28 +329,28 @@ export const JobProvider = ({ children }: { children: ReactNode }) => {
     addReminder,
     removeReminder,
     toggleArchive,
-    exportBackup,
-    importBackup,
     stats,
   };
 
   return <JobContext.Provider value={value}>{children}</JobContext.Provider>;
 };
 
-export const jobTracks: Job["track"][] = [
-  "Full Stack",
-  "Frontend",
-  "Backend",
-  "Mobile",
-  "Design",
-  "Dados",
+export const jobTracks: JobTrack[] = [
+  "AI",
+  "FULL_STACK",
+  "CLOUD",
 ];
 export const jobStatuses: JobStatus[] = [
-  "Aplicada",
-  "Entrevista",
-  "Oferta",
-  "Recusada",
-  "Ghosted",
-  "Eliminado",
-  "Desistencia",
+  "Lead",
+  "Applied",
+  "Viewed",
+  "Contacted",
+  "Interview",
+  "TechnicalTest",
+  "Offer",
+  "Accepted",
+  "Rejected",
+  "Withdrawn",
+  "Closed",
 ];
+

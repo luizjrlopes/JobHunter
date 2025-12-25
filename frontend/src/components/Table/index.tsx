@@ -1,8 +1,8 @@
-import { Calendar, Trash2 } from "lucide-react";
+﻿import { Calendar, Trash2 } from "lucide-react";
 import Button from "../Button";
 import Badge from "../Badge";
 import { formatDate } from "../../utils/formatDate";
-import type { Job } from "../../types";
+import type { Job, JobStatus, JobTrack } from "../../types";
 import {
   Body,
   Cell,
@@ -25,13 +25,31 @@ import {
   LinkOverlay,
 } from "./styles";
 
+const statusLabels: Record<JobStatus, string> = {
+  Lead: "Lead",
+  Applied: "Aplicada",
+  Viewed: "Visualizada",
+  Contacted: "Contatado",
+  Interview: "Entrevista",
+  TechnicalTest: "Teste Técnico",
+  Offer: "Oferta",
+  Accepted: "Aceita",
+  Rejected: "Rejeitado",
+  Withdrawn: "Retirada",
+  Closed: "Encerrada",
+};
+
 interface TableProps {
   jobs: Job[];
-  onDelete: (id: number) => void;
-  onToggleArchive?: (id: number) => void;
+  onDelete: (id: string) => void;
+  onToggleArchive?: (id: string) => void;
+  trackLabels?: Record<JobTrack, string>;
 }
 
-const JobsTable = ({ jobs, onDelete, onToggleArchive }: TableProps) => (
+const getCompany = (job: Job) => job.company ?? "-";
+const getRole = (job: Job) => job.title ?? "-";
+
+const JobsTable = ({ jobs, onDelete, onToggleArchive, trackLabels }: TableProps) => (
   <TableContainer>
     <ScrollArea>
       <StyledTable>
@@ -50,19 +68,19 @@ const JobsTable = ({ jobs, onDelete, onToggleArchive }: TableProps) => (
               <Cell>
                 <CompanyCell>
                   <LinkOverlay to={`/detalhes/${job.id}`}>
-                    <CompanyAvatar>{job.company.charAt(0)}</CompanyAvatar>
+                    <CompanyAvatar>{getCompany(job).charAt(0)}</CompanyAvatar>
                     <CompanyInfo>
-                      <Position>{job.position}</Position>
-                      <CompanyName>{job.company}</CompanyName>
+                      <Position>{getRole(job)}</Position>
+                      <CompanyName>{getCompany(job)}</CompanyName>
                     </CompanyInfo>
                   </LinkOverlay>
                 </CompanyCell>
               </Cell>
               <Cell>
-                <TrackTag>{job.track}</TrackTag>
+                <TrackTag>{trackLabels?.[job.track] ?? job.track}</TrackTag>
               </Cell>
               <Cell>
-                <Badge status={job.status}>{job.status}</Badge>
+                <Badge status={job.status}>{statusLabels[job.status]}</Badge>
               </Cell>
               <Cell>
                 <DateText>
@@ -74,9 +92,7 @@ const JobsTable = ({ jobs, onDelete, onToggleArchive }: TableProps) => (
                 {onToggleArchive && (
                   <Button
                     variant="ghost"
-                    aria-label={`${job.archived ? "Desarquivar" : "Arquivar"} ${
-                      job.company
-                    }`}
+                    aria-label={`${job.archived ? "Desarquivar" : "Arquivar"} ${getCompany(job)}`}
                     onClick={() => onToggleArchive(job.id)}
                     style={{ marginRight: 8 }}
                   >
@@ -85,7 +101,7 @@ const JobsTable = ({ jobs, onDelete, onToggleArchive }: TableProps) => (
                 )}
                 <Button
                   variant="icon"
-                  aria-label={`Remover ${job.company}`}
+                  aria-label={`Remover ${getCompany(job)}`}
                   onClick={() => onDelete(job.id)}
                 >
                   <Trash2 size={16} />
@@ -108,3 +124,4 @@ const JobsTable = ({ jobs, onDelete, onToggleArchive }: TableProps) => (
 );
 
 export default JobsTable;
+
